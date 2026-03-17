@@ -55,6 +55,7 @@ bool UGeoJsonParser::ParseString(const FString& JsonString, TArray<FGISFeature>&
                 FGISFeature Feature;
                 if (ParseFeature(*FeatureObject, Feature))
                 {
+                    Feature.Category = InferCategory(Feature.Properties);
                     OutFeatures.Add(MoveTemp(Feature));
                 }
             }
@@ -66,6 +67,7 @@ bool UGeoJsonParser::ParseString(const FString& JsonString, TArray<FGISFeature>&
         FGISFeature Feature;
         if (ParseFeature(RootObject, Feature))
         {
+            Feature.Category = InferCategory(Feature.Properties);
             OutFeatures.Add(MoveTemp(Feature));
         }
     }
@@ -107,6 +109,94 @@ TArray<FGISFeature> UGeoJsonParser::FilterByProperty(
         }
     }
     return Result;
+}
+
+TArray<FGISFeature> UGeoJsonParser::FilterByCategory(
+    const TArray<FGISFeature>& Features,
+    EGISFeatureCategory Category)
+{
+    TArray<FGISFeature> Result;
+    for (const FGISFeature& Feature : Features)
+    {
+        if (Feature.Category == Category)
+        {
+            Result.Add(Feature);
+        }
+    }
+    return Result;
+}
+
+EGISFeatureCategory UGeoJsonParser::InferCategory(const TMap<FString, FString>& Properties)
+{
+    // OSM tag 优先级：先检查最具体的 tag
+
+    // 1. highway=* → Road
+    if (Properties.Contains(TEXT("highway")))
+    {
+        return EGISFeatureCategory::Road;
+    }
+
+    // 2. waterway=river/stream/canal/drain → River
+    if (const FString* Waterway = Properties.Find(TEXT("waterway")))
+    {
+        if (*Waterway == TEXT("river") || *Waterway == TEXT("stream") ||
+            *Waterway == TEXT("canal") || *Waterway == TEXT("drain") ||
+            *Waterway == TEXT("ditch"))
+        {
+            return EGISFeatureCategory::River;
+        }
+        // waterway=riverbank → WaterBody (面域)
+        if (*Waterway == TEXT("riverbank") || *Waterway == TEXT("dock") ||
+            *Waterway == TEXT("boatyard"))
+        {
+            return EGISFeatureCategory::WaterBody;
+        }
+    }
+
+    // 3. natural=coastline → Coastline
+    if (const FString* Natural = Properties.Find(TEXT("natural")))
+    {
+        if (*Natural == TEXT("coastline"))
+        {
+            return EGISFeatureCategory::Coastline;
+        }
+        if (*Natural == TEXT("water") || *Natural == TEXT("bay") || *Natural == TEXT("strait"))
+        {
+            return EGISFeatureCategory::WaterBody;
+        }
+        if (*Natural == TEXT("wood") || *Natural == TEXT("scrub") ||
+            *Natural == TEXT("grassland") || *Natural == TEXT("heath") ||
+            *Natural == TEXT("wetland") || *Natural == TEXT("beach") ||
+            *Natural == TEXT("cliff") || *Natural == TEXT("peak"))
+        {
+            return EGISFeatureCategory::Natural;
+        }
+    }
+
+    // 4. water=* → WaterBody
+    if (Properties.Contains(TEXT("water")))
+    {
+        return EGISFeatureCategory::WaterBody;
+    }
+
+    // 5. landuse=reservoir/basin → WaterBody
+    if (const FString* LandUse = Properties.Find(TEXT("landuse")))
+    {
+        if (*LandUse == TEXT("reservoir") || *LandUse == TEXT("basin"))
+        {
+            return EGISFeatureCategory::WaterBody;
+        }
+        // 其他 landuse → LandUse
+        return EGISFeatureCategory::LandUse;
+    }
+
+    // 6. building=* → Building
+    if (Properties.Contains(TEXT("building")))
+    {
+        return EGISFeatureCategory::Building;
+    }
+
+    return EGISFeatureCategory::Other;
 }
 
 bool UGeoJsonParser::ParseFeature(const TSharedPtr<FJsonObject>& FeatureObject, FGISFeature& OutFeature)

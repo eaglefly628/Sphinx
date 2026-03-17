@@ -38,6 +38,8 @@ void AGISWorldBuilder::InitDeriver()
     PolygonDeriver->MinPolygonArea = MinPolygonArea;
     PolygonDeriver->ClassifyRules = ClassifyRules;
     PolygonDeriver->RoadClassWeights = RoadClassWeights;
+    PolygonDeriver->DEMFormat = DEMFormat;
+    PolygonDeriver->TerrainAnalysisResolution = TerrainAnalysisResolution;
 }
 
 void AGISWorldBuilder::GenerateAll()
@@ -46,18 +48,15 @@ void AGISWorldBuilder::GenerateAll()
     InitDeriver();
 
     // 拼接完整路径
-    const FString FullGeoJsonPath = FPaths::Combine(
-        FPaths::ProjectContentDir(), RoadsGeoJsonPath);
-    const FString FullDEMPath = DEMFilePath.IsEmpty()
-        ? FString()
-        : FPaths::Combine(FPaths::ProjectContentDir(), DEMFilePath);
+    const FString FullDEMPath = FPaths::Combine(FPaths::ProjectContentDir(), DEMPath);
+    const FString FullGeoJsonPath = FPaths::Combine(FPaths::ProjectContentDir(), GeoJsonPath);
 
-    UE_LOG(LogTemp, Log, TEXT("GISWorldBuilder: Generating from %s"), *FullGeoJsonPath);
+    UE_LOG(LogTemp, Log, TEXT("GISWorldBuilder: DEM=%s, GeoJSON=%s"), *FullDEMPath, *FullGeoJsonPath);
 
-    // 同步生成
+    // 同步生成（DEM 主导 + 矢量切割）
     GeneratedPolygons = PolygonDeriver->GeneratePolygons(
-        FullGeoJsonPath,
         FullDEMPath,
+        FullGeoJsonPath,
         OriginLongitude,
         OriginLatitude
     );
@@ -84,17 +83,14 @@ void AGISWorldBuilder::GenerateAllAsync()
     ClearGenerated();
     InitDeriver();
 
-    const FString FullGeoJsonPath = FPaths::Combine(
-        FPaths::ProjectContentDir(), RoadsGeoJsonPath);
-    const FString FullDEMPath = DEMFilePath.IsEmpty()
-        ? FString()
-        : FPaths::Combine(FPaths::ProjectContentDir(), DEMFilePath);
+    const FString FullDEMPath = FPaths::Combine(FPaths::ProjectContentDir(), DEMPath);
+    const FString FullGeoJsonPath = FPaths::Combine(FPaths::ProjectContentDir(), GeoJsonPath);
 
     FOnPolygonsGenerated Callback;
     Callback.BindDynamic(this, &AGISWorldBuilder::OnPolygonsGenerated);
 
     PolygonDeriver->GeneratePolygonsAsync(
-        FullGeoJsonPath, FullDEMPath,
+        FullDEMPath, FullGeoJsonPath,
         OriginLongitude, OriginLatitude,
         Callback
     );

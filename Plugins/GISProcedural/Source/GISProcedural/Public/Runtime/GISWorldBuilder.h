@@ -19,10 +19,13 @@ class UGISPolygonComponent;
  *
  * 用法：
  *   1. 拖到关卡中
- *   2. 在 Details 面板填 GeoJSON 路径、坐标原点
- *   3. 指定 ClassifyRules DataAsset
+ *   2. 在 Details 面板填 DEM 路径（瓦片文件/目录）、GeoJSON 路径、坐标原点
+ *   3. 指定 ClassifyRules DataAsset（可选，有默认值）
  *   4. Play → BeginPlay 自动生成
  *   或者在编辑器中点 "Generate In Editor" 按钮预览
+ *
+ * 数据流：
+ *   DEM 瓦片 → 地形分析（坡度/高程分区） → 矢量切割（道路/河流/海岸线） → Polygon → PCG
  */
 UCLASS(BlueprintType, Blueprintable)
 class GISPROCEDURAL_API AGISWorldBuilder : public AActor
@@ -34,13 +37,21 @@ public:
 
     // ============ 输入配置（Details 面板填写） ============
 
-    /** 道路 GeoJSON 文件路径（相对于项目 Content 目录） */
+    /** DEM 瓦片路径（文件或目录，支持 .hgt/.tif/.png/.r16） */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|Input")
-    FString RoadsGeoJsonPath = TEXT("GISData/Region_01/roads.geojson");
+    FString DEMPath = TEXT("GISData/Region_01/DEM/");
 
-    /** DEM 高程文件路径（可选） */
+    /** OSM GeoJSON 文件路径（含道路/河流/海岸线/水体等） */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|Input")
-    FString DEMFilePath;
+    FString GeoJsonPath = TEXT("GISData/Region_01/osm_data.geojson");
+
+    /** DEM 格式（Auto = 按扩展名检测） */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|Input")
+    EDEMFormat DEMFormat = EDEMFormat::Auto;
+
+    /** 地形分析分辨率（米，越小越精细但越慢） */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|Input", meta = (ClampMin = "5.0", ClampMax = "500.0"))
+    float TerrainAnalysisResolution = 30.0f;
 
     /** 区域中心经度 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|Input")

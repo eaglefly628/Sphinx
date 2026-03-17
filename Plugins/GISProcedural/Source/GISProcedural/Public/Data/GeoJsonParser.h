@@ -50,6 +50,22 @@ public:
         const FString& Value
     );
 
+    /**
+     * 按 OSM 要素分类过滤
+     */
+    UFUNCTION(BlueprintCallable, Category = "GISProcedural|Data")
+    static TArray<FGISFeature> FilterByCategory(
+        const TArray<FGISFeature>& Features,
+        EGISFeatureCategory Category
+    );
+
+    /**
+     * 从 OSM properties 自动推断要素分类
+     * 解析后自动调用，也可手动重新分类
+     */
+    UFUNCTION(BlueprintCallable, Category = "GISProcedural|Data")
+    static EGISFeatureCategory InferCategory(const TMap<FString, FString>& Properties);
+
 private:
     /** 解析单个 Feature 对象 */
     bool ParseFeature(const TSharedPtr<class FJsonObject>& FeatureObject, FGISFeature& OutFeature);

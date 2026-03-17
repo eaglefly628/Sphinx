@@ -22,6 +22,7 @@ public class GISProcedural : ModuleRules
         {
             "GeometryAlgorithms",  // 三角剖分、面域提取等
             "Projects",
+            "ImageWrapper",        // PNG heightmap 解码
         });
 
         // 不依赖 ArcGIS SDK — 保持插件独立性
