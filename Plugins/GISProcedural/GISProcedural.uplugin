@@ -1,0 +1,25 @@
+{
+    "FileVersion": 3,
+    "Version": 1,
+    "VersionName": "0.1.0",
+    "FriendlyName": "GIS Procedural Generation",
+    "Description": "Procedural world generation from GIS data (GeoJSON/DEM/ArcGIS REST) - 从 GIS 矢量数据自动推导土地分类 Polygon，驱动 PCG 生成建筑和植被",
+    "Category": "GIS",
+    "CreatedBy": "MilSim Team",
+    "EnabledByDefault": true,
+    "CanContainContent": true,
+    "IsBetaVersion": true,
+    "Modules": [
+        {
+            "Name": "GISProcedural",
+            "Type": "Runtime",
+            "LoadingPhase": "Default"
+        }
+    ],
+    "Plugins": [
+        {
+            "Name": "PCG",
+            "Enabled": true
+        }
+    ]
+}
