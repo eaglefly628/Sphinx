@@ -574,15 +574,176 @@ bool UPolygonDeriver::BuildRoadGraph()
 
 // ============ 内部算法 ============
 
+// ---- 辅助：2D 线段求交（XY 平面） ----
+static bool SegmentIntersection2D(
+    const FVector& A, const FVector& B,
+    const FVector& C, const FVector& D,
+    float& OutT, float& OutU)
+{
+    // A + t*(B-A) 与 C + u*(D-C) 的交点
+    const float Dx1 = B.X - A.X;
+    const float Dy1 = B.Y - A.Y;
+    const float Dx2 = D.X - C.X;
+    const float Dy2 = D.Y - C.Y;
+
+    const float Denom = Dx1 * Dy2 - Dy1 * Dx2;
+    if (FMath::Abs(Denom) < KINDA_SMALL_NUMBER)
+    {
+        return false; // 平行或共线
+    }
+
+    const float Dx3 = C.X - A.X;
+    const float Dy3 = C.Y - A.Y;
+
+    OutT = (Dx3 * Dy2 - Dy3 * Dx2) / Denom;
+    OutU = (Dx3 * Dy1 - Dy3 * Dx1) / Denom;
+
+    return (OutT >= -KINDA_SMALL_NUMBER && OutT <= 1.0f + KINDA_SMALL_NUMBER &&
+            OutU >= -KINDA_SMALL_NUMBER && OutU <= 1.0f + KINDA_SMALL_NUMBER);
+}
+
+// ---- 辅助：判断点在有向线段的哪一侧 (>0 左侧, <0 右侧, =0 在线上) ----
+static float PointSideOfLine2D(const FVector& P, const FVector& LineA, const FVector& LineB)
+{
+    return (LineB.X - LineA.X) * (P.Y - LineA.Y) - (LineB.Y - LineA.Y) * (P.X - LineA.X);
+}
+
+// ---- 辅助：用一条无限直线将多边形切成两半 (Sutherland-Hodgman 变体) ----
+// LineA→LineB 定义切割线方向，返回 "左侧" 的多边形
+static TArray<FVector> ClipPolygonBySide(
+    const TArray<FVector>& Poly,
+    const FVector& LineA, const FVector& LineB,
+    bool bKeepLeft)
+{
+    TArray<FVector> Output;
+    if (Poly.Num() < 3) return Output;
+
+    const int32 N = Poly.Num();
+    for (int32 i = 0; i < N; ++i)
+    {
+        const FVector& Cur = Poly[i];
+        const FVector& Next = Poly[(i + 1) % N];
+
+        const float SideCur = PointSideOfLine2D(Cur, LineA, LineB);
+        const float SideNext = PointSideOfLine2D(Next, LineA, LineB);
+
+        const bool bCurInside = bKeepLeft ? (SideCur >= -KINDA_SMALL_NUMBER) : (SideCur <= KINDA_SMALL_NUMBER);
+        const bool bNextInside = bKeepLeft ? (SideNext >= -KINDA_SMALL_NUMBER) : (SideNext <= KINDA_SMALL_NUMBER);
+
+        if (bCurInside)
+        {
+            Output.Add(Cur);
+        }
+
+        // 如果两点在不同侧，计算交点
+        if (bCurInside != bNextInside)
+        {
+            float T, U;
+            if (SegmentIntersection2D(Cur, Next, LineA, LineB, T, U))
+            {
+                FVector Intersection = FMath::Lerp(Cur, Next, FMath::Clamp(T, 0.0f, 1.0f));
+                Output.Add(Intersection);
+            }
+        }
+    }
+
+    return Output;
+}
+
+// ---- 辅助：用一条有限线段切割多边形，返回 0（未切） 或 2 个子多边形 ----
+static bool SplitPolygonBySegment(
+    const TArray<FVector>& Poly,
+    const FVector& SegA, const FVector& SegB,
+    TArray<FVector>& OutLeft, TArray<FVector>& OutRight)
+{
+    // 先检查线段是否确实穿越多边形（至少 2 个交点与多边形边界）
+    int32 IntersectionCount = 0;
+    const int32 N = Poly.Num();
+    for (int32 i = 0; i < N; ++i)
+    {
+        float T, U;
+        if (SegmentIntersection2D(Poly[i], Poly[(i + 1) % N], SegA, SegB, T, U))
+        {
+            // 严格在边内部的交点（不含端点退化情况）
+            if (T > 0.01f && T < 0.99f && U > 0.01f && U < 0.99f)
+            {
+                ++IntersectionCount;
+            }
+        }
+    }
+
+    if (IntersectionCount < 2)
+    {
+        return false;
+    }
+
+    // 用线段所在直线（延长至无穷）做 Sutherland-Hodgman 切割
+    // 扩展线段方向以确保覆盖整个多边形
+    const FVector Dir = (SegB - SegA).GetSafeNormal() * 1000000.0f;
+    const FVector ExtA = SegA - Dir;
+    const FVector ExtB = SegB + Dir;
+
+    OutLeft = ClipPolygonBySide(Poly, ExtA, ExtB, true);
+    OutRight = ClipPolygonBySide(Poly, ExtA, ExtB, false);
+
+    return (OutLeft.Num() >= 3 && OutRight.Num() >= 3);
+}
+
 TArray<TArray<FVector>> UPolygonDeriver::CutPolygonWithLines(
     const TArray<FVector>& PolygonVerts,
     const TArray<TArray<FVector>>& CutLines) const
 {
-    TArray<TArray<FVector>> Result;
+    // 工作集：初始只有原始多边形
+    TArray<TArray<FVector>> WorkingSet;
+    WorkingSet.Add(PolygonVerts);
 
-    // TODO: 实现完整的多边形-线段切割算法
-    // 当前简化版：直接返回原多边形
-    Result.Add(PolygonVerts);
+    // 对每条切割线（道路/河流/海岸线 polyline）的每个线段做迭代切割
+    for (const TArray<FVector>& Line : CutLines)
+    {
+        for (int32 Seg = 0; Seg < Line.Num() - 1; ++Seg)
+        {
+            const FVector& SegA = Line[Seg];
+            const FVector& SegB = Line[Seg + 1];
+
+            // 跳过退化线段
+            if (FVector::DistSquared(SegA, SegB) < 1.0f)
+            {
+                continue;
+            }
+
+            TArray<TArray<FVector>> NextSet;
+            for (const TArray<FVector>& Poly : WorkingSet)
+            {
+                TArray<FVector> LeftHalf, RightHalf;
+                if (SplitPolygonBySegment(Poly, SegA, SegB, LeftHalf, RightHalf))
+                {
+                    NextSet.Add(MoveTemp(LeftHalf));
+                    NextSet.Add(MoveTemp(RightHalf));
+                }
+                else
+                {
+                    // 未被此线段切割，保留原样
+                    NextSet.Add(Poly);
+                }
+            }
+            WorkingSet = MoveTemp(NextSet);
+        }
+    }
+
+    // 过滤掉退化多边形（面积过小）
+    TArray<TArray<FVector>> Result;
+    for (const TArray<FVector>& Poly : WorkingSet)
+    {
+        if (Poly.Num() >= 3)
+        {
+            const float Area = FMath::Abs(ComputePolygonArea(Poly));
+            if (Area > 100.0f) // 至少 0.01 平方米（/10000 后），避免碎片
+            {
+                Result.Add(Poly);
+            }
+        }
+    }
+
     return Result;
 }
 

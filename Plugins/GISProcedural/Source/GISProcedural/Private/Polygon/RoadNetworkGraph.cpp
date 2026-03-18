@@ -122,12 +122,177 @@ void FRoadNetworkGraph::Reset()
 
 void FRoadNetworkGraph::ComputeIntersectionsAndSplit()
 {
-    // TODO: 实现线段交叉检测和分割
-    // 1. 遍历所有边对，检测线段交叉
-    // 2. 在交叉点处插入新节点
-    // 3. 将原始边分割为两条新边
-    // 这是 Planar Face Extraction 的前提条件
-    UE_LOG(LogTemp, Log, TEXT("RoadNetworkGraph: ComputeIntersectionsAndSplit - %d nodes, %d edges"), Nodes.Num(), Edges.Num());
+    UE_LOG(LogTemp, Log, TEXT("RoadNetworkGraph: ComputeIntersectionsAndSplit - %d nodes, %d edges (before)"),
+        Nodes.Num(), Edges.Num());
+
+    // 收集所有需要分割的信息：{ EdgeID → 排序后的 t 参数列表 + 对应交点 }
+    struct FSplitInfo
+    {
+        float T;
+        FVector Position;
+        FVector2D GeoPosition;
+    };
+    TMap<int32, TArray<FSplitInfo>> EdgeSplits;
+
+    const int32 OriginalEdgeCount = Edges.Num();
+
+    // 1. O(n²) 遍历所有边对，检测线段交叉
+    for (int32 i = 0; i < OriginalEdgeCount; ++i)
+    {
+        const FRoadEdge& EdgeA = Edges[i];
+        if (EdgeA.EdgeID == INDEX_NONE) continue;
+        if (!Nodes.IsValidIndex(EdgeA.StartNodeID) || !Nodes.IsValidIndex(EdgeA.EndNodeID)) continue;
+
+        const FVector& A1 = Nodes[EdgeA.StartNodeID].Position;
+        const FVector& A2 = Nodes[EdgeA.EndNodeID].Position;
+
+        for (int32 j = i + 1; j < OriginalEdgeCount; ++j)
+        {
+            const FRoadEdge& EdgeB = Edges[j];
+            if (EdgeB.EdgeID == INDEX_NONE) continue;
+            if (!Nodes.IsValidIndex(EdgeB.StartNodeID) || !Nodes.IsValidIndex(EdgeB.EndNodeID)) continue;
+
+            // 共享端点的边不算交叉
+            if (EdgeA.StartNodeID == EdgeB.StartNodeID || EdgeA.StartNodeID == EdgeB.EndNodeID ||
+                EdgeA.EndNodeID == EdgeB.StartNodeID || EdgeA.EndNodeID == EdgeB.EndNodeID)
+            {
+                continue;
+            }
+
+            const FVector& B1 = Nodes[EdgeB.StartNodeID].Position;
+            const FVector& B2 = Nodes[EdgeB.EndNodeID].Position;
+
+            // 2D 线段求交
+            const float Dx1 = A2.X - A1.X;
+            const float Dy1 = A2.Y - A1.Y;
+            const float Dx2 = B2.X - B1.X;
+            const float Dy2 = B2.Y - B1.Y;
+
+            const float Denom = Dx1 * Dy2 - Dy1 * Dx2;
+            if (FMath::Abs(Denom) < KINDA_SMALL_NUMBER)
+            {
+                continue; // 平行
+            }
+
+            const float Dx3 = B1.X - A1.X;
+            const float Dy3 = B1.Y - A1.Y;
+
+            const float T = (Dx3 * Dy2 - Dy3 * Dx2) / Denom;
+            const float U = (Dx3 * Dy1 - Dy3 * Dx1) / Denom;
+
+            // 严格内部交点（排除端点）
+            constexpr float Eps = 0.001f;
+            if (T > Eps && T < 1.0f - Eps && U > Eps && U < 1.0f - Eps)
+            {
+                const FVector IntersectPos = A1 + (A2 - A1) * T;
+
+                // 对两条边都记录分割信息
+                // 插值 GeoPosition
+                const FVector2D GeoA = FMath::Lerp(
+                    Nodes[EdgeA.StartNodeID].GeoPosition,
+                    Nodes[EdgeA.EndNodeID].GeoPosition, T);
+
+                FSplitInfo SplitA;
+                SplitA.T = T;
+                SplitA.Position = IntersectPos;
+                SplitA.GeoPosition = GeoA;
+                EdgeSplits.FindOrAdd(i).Add(SplitA);
+
+                const FVector2D GeoB = FMath::Lerp(
+                    Nodes[EdgeB.StartNodeID].GeoPosition,
+                    Nodes[EdgeB.EndNodeID].GeoPosition, U);
+
+                FSplitInfo SplitB;
+                SplitB.T = U;
+                SplitB.Position = IntersectPos;
+                SplitB.GeoPosition = GeoB;
+                EdgeSplits.FindOrAdd(j).Add(SplitB);
+            }
+        }
+    }
+
+    if (EdgeSplits.Num() == 0)
+    {
+        UE_LOG(LogTemp, Log, TEXT("RoadNetworkGraph: No intersections found"));
+        return;
+    }
+
+    // 2. 对每条需要分割的边，按 T 排序后创建新节点和新边
+    int32 TotalSplits = 0;
+
+    for (auto& Pair : EdgeSplits)
+    {
+        const int32 EdgeIdx = Pair.Key;
+        TArray<FSplitInfo>& Splits = Pair.Value;
+
+        if (!Edges.IsValidIndex(EdgeIdx)) continue;
+
+        // 按 T 排序
+        Splits.Sort([](const FSplitInfo& A, const FSplitInfo& B) { return A.T < B.T; });
+
+        // 去重（同一位置的交点只保留一个）
+        for (int32 k = Splits.Num() - 1; k > 0; --k)
+        {
+            if (FVector::DistSquared(Splits[k].Position, Splits[k - 1].Position) < 1.0f)
+            {
+                Splits.RemoveAt(k);
+            }
+        }
+
+        const FRoadEdge OriginalEdge = Edges[EdgeIdx]; // copy
+        const int32 OrigStartID = OriginalEdge.StartNodeID;
+        const int32 OrigEndID = OriginalEdge.EndNodeID;
+        const FString& RoadClass = OriginalEdge.RoadClass;
+
+        // 创建分割点节点
+        TArray<int32> SplitNodeIDs;
+        for (const FSplitInfo& Split : Splits)
+        {
+            // 检查是否已有非常接近的节点（因为多条边可能在同一点交叉）
+            int32 ExistingNode = FindNearestNode(Split.Position, 50.0);
+            if (ExistingNode != INDEX_NONE)
+            {
+                SplitNodeIDs.Add(ExistingNode);
+            }
+            else
+            {
+                SplitNodeIDs.Add(AddNode(Split.Position, Split.GeoPosition));
+            }
+        }
+
+        // 从原始起点的 ConnectedEdges 中移除原始边
+        if (Nodes.IsValidIndex(OrigStartID))
+        {
+            Nodes[OrigStartID].ConnectedEdges.Remove(OriginalEdge.EdgeID);
+        }
+        if (Nodes.IsValidIndex(OrigEndID))
+        {
+            Nodes[OrigEndID].ConnectedEdges.Remove(OriginalEdge.EdgeID);
+        }
+
+        // 标记原始边为无效（不实际删除以保持索引稳定）
+        Edges[EdgeIdx].StartNodeID = INDEX_NONE;
+        Edges[EdgeIdx].EndNodeID = INDEX_NONE;
+
+        // 创建新的子边链：Start → Split1 → Split2 → ... → End
+        TArray<int32> ChainNodes;
+        ChainNodes.Add(OrigStartID);
+        ChainNodes.Append(SplitNodeIDs);
+        ChainNodes.Add(OrigEndID);
+
+        for (int32 k = 0; k < ChainNodes.Num() - 1; ++k)
+        {
+            if (ChainNodes[k] != ChainNodes[k + 1])
+            {
+                AddEdge(ChainNodes[k], ChainNodes[k + 1], RoadClass);
+            }
+        }
+
+        TotalSplits += Splits.Num();
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("RoadNetworkGraph: Split %d edges at %d intersection points → %d nodes, %d edges (after)"),
+        EdgeSplits.Num(), TotalSplits, Nodes.Num(), Edges.Num());
 }
 
 TArray<TPair<int32, double>> FRoadNetworkGraph::GetSortedEdgeAngles(int32 NodeID) const
