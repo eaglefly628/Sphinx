@@ -41,6 +41,55 @@ TArray<FTerrainZone> UTerrainAnalyzer::AnalyzeTerrain(
     return Result;
 }
 
+TArray<FTerrainZone> UTerrainAnalyzer::AnalyzeFromGrid(
+    const TArray<float>& ElevGrid,
+    int32 Width, int32 Height,
+    double MinLon, double MinLat,
+    double MaxLon, double MaxLat,
+    double OriginLon, double OriginLat)
+{
+    TArray<FTerrainZone> Result;
+
+    // 直接设置内部网格数据
+    ElevationGrid = ElevGrid;
+    GridWidth = Width;
+    GridHeight = Height;
+    AnalysisMinLon = MinLon;
+    AnalysisMinLat = MinLat;
+    AnalysisMaxLon = MaxLon;
+    AnalysisMaxLat = MaxLat;
+
+    if (ElevationGrid.Num() != Width * Height || Width == 0 || Height == 0)
+    {
+        UE_LOG(LogTemp, Error, TEXT("TerrainAnalyzer: Invalid grid data (%d elements, %dx%d)"),
+            ElevationGrid.Num(), Width, Height);
+        return Result;
+    }
+
+    if (!ComputeSlopeAspect())
+    {
+        UE_LOG(LogTemp, Error, TEXT("TerrainAnalyzer: Failed to compute slope/aspect from grid"));
+        return Result;
+    }
+
+    if (!ClassifyTerrainGrid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("TerrainAnalyzer: Failed to classify terrain from grid"));
+        return Result;
+    }
+
+    if (!LabelConnectedZones())
+    {
+        UE_LOG(LogTemp, Error, TEXT("TerrainAnalyzer: Failed to label zones from grid"));
+        return Result;
+    }
+
+    Result = ExtractZoneBoundaries(OriginLon, OriginLat);
+
+    UE_LOG(LogTemp, Log, TEXT("TerrainAnalyzer: AnalyzeFromGrid produced %d zones"), Result.Num());
+    return Result;
+}
+
 // ============ Step 1: 高程网格 ============
 
 bool UTerrainAnalyzer::BuildElevationGrid(

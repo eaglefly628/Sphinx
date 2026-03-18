@@ -1,9 +1,10 @@
 // PolygonDeriver.h - Polygon 推导算法核心
-// 流程：DEM 地形分区 → 矢量数据（道路/河流/海岸线）切割 → 最终 Polygon
+// 流程：数据源查询 → 地形分区（可选） → 矢量切割 → 最终 Polygon
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Data/GISFeature.h"
+#include "Data/IGISDataProvider.h"
 #include "Polygon/LandUsePolygon.h"
 #include "Polygon/RoadNetworkGraph.h"
 #include "DEM/DEMTypes.h"
@@ -18,15 +19,17 @@ struct FTerrainZone;
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnPolygonsGenerated, const TArray<FLandUsePolygon>&, Polygons);
 
 /**
- * 核心算法类：从 DEM + 矢量数据推导出土地分类 Polygon
+ * 核心算法类：从 GIS 数据源推导出土地分类 Polygon
  *
- * 算法流程：
- *   1. 加载 DEM 瓦片 → 高程网格
- *   2. 地形分析（坡度/坡向） → 栅格分类 → 连通区域 → 地形分区
- *   3. 加载矢量数据（GeoJSON：道路/河流/海岸线/水体）
- *   4. 用矢量线要素（道路/河流/海岸线）切割地形分区 → 细化 Polygon
- *   5. 用矢量面要素（水体/已有 landuse）覆盖/标记对应 Polygon
- *   6. 综合分类 + 填充 PCG 参数
+ * 两种工作模式：
+ *
+ * A. DataProvider 模式（推荐）：
+ *    SetDataProvider() → GenerateFromProvider()
+ *    数据来自 IGISDataProvider（本地文件 / ArcGIS REST / 自定义）
+ *
+ * B. 传统模式（向后兼容）：
+ *    GeneratePolygons(DEMPath, GeoJsonPath, ...)
+ *    直接指定文件路径
  *
  * 纯计算，无渲染依赖，可在任何线程执行
  */
@@ -36,6 +39,32 @@ class GISPROCEDURAL_API UPolygonDeriver : public UObject
     GENERATED_BODY()
 
 public:
+
+    // ======== DataProvider 模式（推荐） ========
+
+    /**
+     * 设置数据源
+     * @param Provider 数据源实现（不持有所有权，调用方管理生命周期）
+     */
+    void SetDataProvider(IGISDataProvider* Provider) { DataProvider = Provider; }
+
+    /**
+     * 从 DataProvider 生成 Polygon
+     * @param Bounds      查询范围
+     * @param OriginLon   坐标原点经度
+     * @param OriginLat   坐标原点纬度
+     * @return 生成的 Polygon 数组
+     */
+    UFUNCTION(BlueprintCallable, Category = "GISProcedural")
+    TArray<FLandUsePolygon> GenerateFromProvider(
+        double OriginLon,
+        double OriginLat
+    );
+
+    /** 设置查询范围（经纬度） */
+    void SetQueryBounds(const FGeoRect& Bounds) { QueryBounds = Bounds; }
+
+    // ======== 传统模式（向后兼容） ========
 
     /**
      * 主入口：从 DEM + GeoJSON 生成 Polygon
@@ -77,13 +106,19 @@ public:
         double OriginLon, double OriginLat
     );
 
-    /** Step 3: 加载 OSM 矢量数据（自动分类为道路/河流/海岸线/水体等） */
+    /** Step 3: 加载矢量数据（从 DataProvider 或 GeoJSON 文件） */
     UFUNCTION(BlueprintCallable, Category = "GISProcedural|Steps")
     bool LoadVectorData(const FString& GeoJsonPath);
+
+    /** Step 3b: 从 DataProvider 加载矢量数据 */
+    bool LoadVectorDataFromProvider(const FGeoRect& Bounds);
 
     /** Step 4: 用矢量线要素切割地形分区 → 细化 Polygon */
     UFUNCTION(BlueprintCallable, Category = "GISProcedural|Steps")
     TArray<FLandUsePolygon> CutZonesWithVectors(double OriginLon, double OriginLat);
+
+    /** Step 4b: 仅从矢量数据生成 Polygon（无 DEM 地形分区） */
+    TArray<FLandUsePolygon> GenerateFromVectorsOnly(double OriginLon, double OriginLat);
 
     /** Step 5: 对每个 Polygon 做综合分类 */
     UFUNCTION(BlueprintCallable, Category = "GISProcedural|Steps")
@@ -132,6 +167,12 @@ public:
     FString GetVectorStats() const;
 
 private:
+    /** 数据源（DataProvider 模式） */
+    IGISDataProvider* DataProvider = nullptr;
+
+    /** 查询范围 */
+    FGeoRect QueryBounds;
+
     /** DEM 解析器 */
     UPROPERTY()
     UDEMParser* DEMParserInstance = nullptr;
@@ -156,37 +197,27 @@ private:
     /** Polygon ID 计数器 */
     int32 NextPolygonID = 0;
 
+    // ---- 内部方法 ----
+
+    /** 将 AllFeatures 按类别拆分到各数组 */
+    void CategorizeFeatures();
+
+    /** 从所有要素推断地理范围 */
+    FGeoRect InferBoundsFromFeatures() const;
+
     // ---- 切割算法 ----
 
-    /**
-     * 用线要素切割一个地形分区多边形
-     * 输入一个 Polygon + 一组切割线 → 输出多个子 Polygon
-     */
     TArray<TArray<FVector>> CutPolygonWithLines(
         const TArray<FVector>& PolygonVerts,
         const TArray<TArray<FVector>>& CutLines
     ) const;
 
-    /**
-     * 将水体面域标记到对应 Polygon
-     * 检测 Polygon 与水体面域的重叠，标记为 Water
-     */
     void MarkWaterBodies(TArray<FLandUsePolygon>& Polygons) const;
 
-    /**
-     * 根据地形分区的 TerrainClass 初步设定 LandUseType
-     */
     static ELandUseType TerrainClassToLandUse(int32 TerrainClass);
-
-    /** 计算多边形面积（Shoelace 公式） */
     static float ComputePolygonArea(const TArray<FVector>& Vertices);
-
-    /** 计算多边形中心点 */
     static FVector ComputePolygonCenter(const TArray<FVector>& Vertices);
-
-    /** 判断多边形是否为顺时针方向 */
     static bool IsClockwise(const TArray<FVector>& Vertices);
 
-    /** 从 DEM 元数据推断分析区域范围 */
     bool InferAnalysisBounds(double& MinLon, double& MinLat, double& MaxLon, double& MaxLat) const;
 };

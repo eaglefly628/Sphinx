@@ -1,14 +1,17 @@
 // PCGGISNode.cpp - 自定义 PCG 节点实现
+// 从 DataAsset 读取 Polygon → 网格采样 → 输出 PCG 点
 #include "PCG/PCGGISNode.h"
 #include "PCG/PCGLandUseData.h"
+#include "Data/LandUseMapDataAsset.h"
 #include "PCGContext.h"
 #include "PCGPin.h"
 #include "Data/PCGPointData.h"
 #include "Helpers/PCGHelpers.h"
+#include "Metadata/PCGMetadata.h"
+#include "Metadata/PCGMetadataAccessor.h"
 
 UPCGGISLandUseSampler::UPCGGISLandUseSampler()
 {
-    // 默认配置
     SamplingInterval = 10.0f;
     bJitterPoints = true;
     JitterAmount = 2.0f;
@@ -28,7 +31,7 @@ FText UPCGGISLandUseSampler::GetDefaultNodeTitle() const
 FText UPCGGISLandUseSampler::GetNodeTooltipText() const
 {
     return NSLOCTEXT("PCGGISNode", "NodeTooltip",
-        "Samples points within GIS land use polygons.\nEach point carries LandUseType attribute for downstream filtering.");
+        "Samples points within GIS land use polygons from a DataAsset.\nEach point carries LandUseType attribute for downstream filtering.");
 }
 
 EPCGSettingsType UPCGGISLandUseSampler::GetType() const
@@ -40,12 +43,11 @@ EPCGSettingsType UPCGGISLandUseSampler::GetType() const
 TArray<FPCGPinProperties> UPCGGISLandUseSampler::InputPinProperties() const
 {
     TArray<FPCGPinProperties> Properties;
-    // 输入: 可选的 LandUse 数据
     Properties.Emplace(
         PCGPinConstants::DefaultInputLabel,
         EPCGDataType::Any,
-        false /*bAllowMultipleConnections*/,
-        false /*bAllowMultipleData*/
+        false,
+        false
     );
     return Properties;
 }
@@ -53,7 +55,6 @@ TArray<FPCGPinProperties> UPCGGISLandUseSampler::InputPinProperties() const
 TArray<FPCGPinProperties> UPCGGISLandUseSampler::OutputPinProperties() const
 {
     TArray<FPCGPinProperties> Properties;
-    // 输出: Point Data（带 LandUseType 属性）
     Properties.Emplace(
         PCGPinConstants::DefaultOutputLabel,
         EPCGDataType::Point
@@ -76,26 +77,93 @@ bool FPCGGISLandUseSamplerElement::ExecuteInternal(FPCGContext* Context) const
         return true;
     }
 
-    // 创建输出 Point Data
+    // 加载 DataAsset
+    ULandUseMapDataAsset* DataAsset = Settings->LandUseDataAsset.LoadSynchronous();
+    if (!DataAsset || DataAsset->Polygons.Num() == 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("PCGGISLandUseSampler: No DataAsset or empty polygons"));
+        return true;
+    }
+
+    // 创建输出
     UPCGPointData* OutputPointData = NewObject<UPCGPointData>();
     TArray<FPCGPoint>& OutputPoints = OutputPointData->GetMutablePoints();
 
-    // TODO: 从 PolygonDataPath 加载 Polygon 数据
-    // TODO: 对每个 Polygon 内部做网格采样
-    // TODO: 每个采样点设置 LandUseType 属性
-    //
-    // 采样逻辑伪代码：
-    // for each Polygon:
-    //   BBox = Polygon.GetBoundingBox()
-    //   for x = BBox.Min.X to BBox.Max.X step SamplingInterval:
-    //     for y = BBox.Min.Y to BBox.Max.Y step SamplingInterval:
-    //       Point = (x, y) + optional jitter
-    //       if PointInPolygon(Point, Polygon):
-    //         PCGPoint.Transform.SetLocation(Point)
-    //         PCGPoint.SetAttribute("LandUseType", Polygon.LandUseType)
-    //         OutputPoints.Add(PCGPoint)
+    // 创建 metadata 属性
+    UPCGMetadata* Metadata = OutputPointData->MutableMetadata();
+    FPCGMetadataAttribute<int32>* LandUseAttr = Metadata->CreateAttribute<int32>(
+        FName(TEXT("LandUseType")), 0, true, true);
+    FPCGMetadataAttribute<int32>* PolygonIDAttr = Metadata->CreateAttribute<int32>(
+        FName(TEXT("PolygonID")), 0, true, true);
+    FPCGMetadataAttribute<float>* BuildingDensityAttr = Metadata->CreateAttribute<float>(
+        FName(TEXT("BuildingDensity")), 0.0f, true, true);
+    FPCGMetadataAttribute<float>* VegetationDensityAttr = Metadata->CreateAttribute<float>(
+        FName(TEXT("VegetationDensity")), 0.0f, true, true);
 
-    UE_LOG(LogTemp, Log, TEXT("PCGGISLandUseSampler: Generated %d sample points"), OutputPoints.Num());
+    const float IntervalCm = Settings->SamplingInterval * 100.0f; // 米 → 厘米
+    const float JitterCm = Settings->JitterAmount * 100.0f;
+    FRandomStream RNG(42);
+
+    for (const FLandUsePolygon& Poly : DataAsset->Polygons)
+    {
+        // 类型过滤
+        if (Settings->FilterTypes.Num() > 0 && !Settings->FilterTypes.Contains(Poly.LandUseType))
+        {
+            continue;
+        }
+
+        if (Poly.WorldVertices.Num() < 3)
+        {
+            continue;
+        }
+
+        // 计算 AABB
+        FBox PolyBounds(ForceInit);
+        for (const FVector& V : Poly.WorldVertices)
+        {
+            PolyBounds += V;
+        }
+
+        // 网格采样
+        for (float X = PolyBounds.Min.X; X <= PolyBounds.Max.X; X += IntervalCm)
+        {
+            for (float Y = PolyBounds.Min.Y; Y <= PolyBounds.Max.Y; Y += IntervalCm)
+            {
+                FVector SamplePos(X, Y, Poly.WorldCenter.Z);
+
+                // 可选抖动
+                if (Settings->bJitterPoints)
+                {
+                    SamplePos.X += RNG.FRandRange(-JitterCm, JitterCm);
+                    SamplePos.Y += RNG.FRandRange(-JitterCm, JitterCm);
+                }
+
+                // 点在多边形内测试
+                if (!IsPointInPolygon(SamplePos, Poly.WorldVertices))
+                {
+                    continue;
+                }
+
+                FPCGPoint& Point = OutputPoints.Emplace_GetRef();
+                Point.Transform.SetLocation(SamplePos);
+                Point.SetLocalBounds(FBox(FVector(-50, -50, -50), FVector(50, 50, 50)));
+                Point.Density = 1.0f;
+                Point.Seed = RNG.GetCurrentSeed();
+
+                // 设置 metadata
+                const int64 MetadataEntry = Metadata->AddEntry();
+                Point.MetadataEntry = MetadataEntry;
+
+                LandUseAttr->SetValue(MetadataEntry, static_cast<int32>(Poly.LandUseType));
+                PolygonIDAttr->SetValue(MetadataEntry, Poly.PolygonID);
+                BuildingDensityAttr->SetValue(MetadataEntry, Poly.BuildingDensity);
+                VegetationDensityAttr->SetValue(MetadataEntry, Poly.VegetationDensity);
+            }
+        }
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("PCGGISLandUseSampler: Generated %d sample points from %d polygons"),
+        OutputPoints.Num(), DataAsset->Polygons.Num());
 
     // 输出到 PCG Graph
     TArray<FPCGTaggedData>& Outputs = Context->OutputData.TaggedData;
@@ -103,4 +171,23 @@ bool FPCGGISLandUseSamplerElement::ExecuteInternal(FPCGContext* Context) const
     Output.Data = OutputPointData;
 
     return true;
+}
+
+bool FPCGGISLandUseSamplerElement::IsPointInPolygon(const FVector& Point, const TArray<FVector>& PolygonVerts)
+{
+    const int32 N = PolygonVerts.Num();
+    if (N < 3) return false;
+
+    bool bInside = false;
+    for (int32 i = 0, j = N - 1; i < N; j = i++)
+    {
+        if (((PolygonVerts[i].Y > Point.Y) != (PolygonVerts[j].Y > Point.Y)) &&
+            (Point.X < (PolygonVerts[j].X - PolygonVerts[i].X) *
+             (Point.Y - PolygonVerts[i].Y) / (PolygonVerts[j].Y - PolygonVerts[i].Y) +
+             PolygonVerts[i].X))
+        {
+            bInside = !bInside;
+        }
+    }
+    return bInside;
 }

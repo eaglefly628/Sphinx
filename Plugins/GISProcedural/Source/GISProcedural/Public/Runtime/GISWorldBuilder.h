@@ -1,31 +1,44 @@
-// GISWorldBuilder.h - 纯 C++ 版世界构建器 Actor
-// 临时驱动入口，等 AngelScript 集成后可切换为 .as 版本
+// GISWorldBuilder.h - 世界构建器 Actor
+// 支持两种数据模式：本地文件 / DataProvider（ArcGIS REST 等）
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Polygon/PolygonDeriver.h"
 #include "Polygon/LandUseClassifier.h"
+#include "Data/IGISDataProvider.h"
 #include "GISWorldBuilder.generated.h"
 
 class UGISPolygonComponent;
+class ULandUseMapDataAsset;
+class ULocalFileProvider;
+class UArcGISRestProvider;
+
+/** 数据源类型 */
+UENUM(BlueprintType)
+enum class EGISDataSourceType : uint8
+{
+    /** 本地文件（GeoJSON + DEM） */
+    LocalFile     UMETA(DisplayName = "Local File"),
+
+    /** ArcGIS REST API */
+    ArcGISRest    UMETA(DisplayName = "ArcGIS REST API"),
+
+    /** 已有 DataAsset（跳过生成，直接加载） */
+    DataAsset     UMETA(DisplayName = "DataAsset"),
+};
 
 /**
  * GIS 世界构建器
  *
- * 纯 C++ 实现，放在关卡中即可自动从 GeoJSON 生成土地分类 Polygon。
- * 所有 UPROPERTY / UFUNCTION 已标记 BlueprintReadWrite / BlueprintCallable，
- * 等 AngelScript 就绪后，直接在 .as 中继承或调用即可，C++ 侧零改动。
+ * 离线/在线分离架构：
+ *   Editor 时：从数据源生成 Polygon → 存为 ULandUseMapDataAsset
+ *   Runtime 时：从 DataAsset 加载 → 驱动 PCG
  *
- * 用法：
- *   1. 拖到关卡中
- *   2. 在 Details 面板填 DEM 路径（瓦片文件/目录）、GeoJSON 路径、坐标原点
- *   3. 指定 ClassifyRules DataAsset（可选，有默认值）
- *   4. Play → BeginPlay 自动生成
- *   或者在编辑器中点 "Generate In Editor" 按钮预览
- *
- * 数据流：
- *   DEM 瓦片 → 地形分析（坡度/高程分区） → 矢量切割（道路/河流/海岸线） → Polygon → PCG
+ * 数据源支持：
+ *   - LocalFile：读磁盘 GeoJSON + DEM
+ *   - ArcGISRest：HTTP 查 Feature Service
+ *   - DataAsset：直接读已生成的 DataAsset
  */
 UCLASS(BlueprintType, Blueprintable)
 class GISPROCEDURAL_API AGISWorldBuilder : public AActor
@@ -35,23 +48,53 @@ class GISPROCEDURAL_API AGISWorldBuilder : public AActor
 public:
     AGISWorldBuilder();
 
-    // ============ 输入配置（Details 面板填写） ============
+    // ============ 数据源选择 ============
 
-    /** DEM 瓦片路径（文件或目录，支持 .hgt/.tif/.png/.r16） */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|Input")
+    /** 数据源类型 */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|DataSource")
+    EGISDataSourceType DataSourceType = EGISDataSourceType::LocalFile;
+
+    // ---- LocalFile 模式 ----
+
+    /** DEM 瓦片路径（文件或目录） */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|DataSource|LocalFile",
+        meta = (EditCondition = "DataSourceType == EGISDataSourceType::LocalFile"))
     FString DEMPath = TEXT("GISData/Region_01/DEM/");
 
-    /** OSM GeoJSON 文件路径（含道路/河流/海岸线/水体等） */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|Input")
+    /** GeoJSON 文件路径 */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|DataSource|LocalFile",
+        meta = (EditCondition = "DataSourceType == EGISDataSourceType::LocalFile"))
     FString GeoJsonPath = TEXT("GISData/Region_01/osm_data.geojson");
 
-    /** DEM 格式（Auto = 按扩展名检测） */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|Input")
+    /** DEM 格式 */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|DataSource|LocalFile",
+        meta = (EditCondition = "DataSourceType == EGISDataSourceType::LocalFile"))
     EDEMFormat DEMFormat = EDEMFormat::Auto;
 
-    /** 地形分析分辨率（米，越小越精细但越慢） */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|Input", meta = (ClampMin = "5.0", ClampMax = "500.0"))
-    float TerrainAnalysisResolution = 30.0f;
+    // ---- ArcGIS REST 模式 ----
+
+    /** Feature Service URL */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|DataSource|ArcGIS",
+        meta = (EditCondition = "DataSourceType == EGISDataSourceType::ArcGISRest"))
+    FString FeatureServiceUrl;
+
+    /** ArcGIS API Key */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|DataSource|ArcGIS",
+        meta = (EditCondition = "DataSourceType == EGISDataSourceType::ArcGISRest"))
+    FString ArcGISApiKey;
+
+    /** 附加图层 URL（可选） */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|DataSource|ArcGIS",
+        meta = (EditCondition = "DataSourceType == EGISDataSourceType::ArcGISRest"))
+    TArray<FString> AdditionalLayerUrls;
+
+    // ---- DataAsset 模式 ----
+
+    /** 已生成的 DataAsset（直接加载） */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|DataSource|DataAsset")
+    ULandUseMapDataAsset* LandUseDataAsset = nullptr;
+
+    // ============ 通用配置 ============
 
     /** 区域中心经度 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|Input")
@@ -61,9 +104,17 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|Input")
     double OriginLatitude = 39.91;
 
+    /** 查询范围（经纬度，默认空 = 不限） */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|Input")
+    FGeoRect QueryBounds;
+
+    /** 地形分析分辨率（米） */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|Input", meta = (ClampMin = "5.0", ClampMax = "500.0"))
+    float TerrainAnalysisResolution = 30.0f;
+
     // ============ 算法配置 ============
 
-    /** 分类规则（在编辑器中创建 ULandUseClassifyRules DataAsset 后拖入） */
+    /** 分类规则 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|Config")
     ULandUseClassifyRules* ClassifyRules = nullptr;
 
@@ -71,7 +122,7 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|Config", meta = (ClampMin = "100.0"))
     float MinPolygonArea = 800.0f;
 
-    /** 道路等级权重配置 */
+    /** 道路等级权重 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|Config")
     TMap<FString, int32> RoadClassWeights;
 
@@ -79,7 +130,7 @@ public:
 
     /** 是否在 BeginPlay 时自动生成 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|Runtime")
-    bool bAutoGenerateOnPlay = true;
+    bool bAutoGenerateOnPlay = false;
 
     /** 是否为每个 Polygon 生成独立的子 Actor */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|Runtime")
@@ -93,69 +144,89 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|Debug", meta = (EditCondition = "bDrawDebugPolygons"))
     float DebugDrawDuration = -1.0f;
 
-    /** 生成结果（运行时可读取） */
+    /** 生成结果 */
     UPROPERTY(BlueprintReadOnly, Category = "GIS|Output")
     TArray<FLandUsePolygon> GeneratedPolygons;
 
     // ============ 接口 ============
 
-    /** 一键生成（BeginPlay 内部调用，也可手动调用） */
+    /** 一键生成 */
     UFUNCTION(BlueprintCallable, Category = "GIS")
     void GenerateAll();
 
-    /** 异步生成（大数据量用） */
+    /** 异步生成 */
     UFUNCTION(BlueprintCallable, Category = "GIS")
     void GenerateAllAsync();
 
-    /** 清除所有已生成的内容 */
+    /** 清除已生成内容 */
     UFUNCTION(BlueprintCallable, Category = "GIS")
     void ClearGenerated();
 
-    /** 获取指定类型的 Polygon 列表 */
+    /** 获取指定类型的 Polygon */
     UFUNCTION(BlueprintCallable, Category = "GIS")
     TArray<FLandUsePolygon> GetPolygonsByType(ELandUseType Type) const;
 
-    /** 打印生成统计信息 */
+    /** 打印统计 */
     UFUNCTION(BlueprintCallable, Category = "GIS|Debug")
     void PrintStatistics() const;
 
     // ============ 编辑器工具 ============
 
 #if WITH_EDITOR
-    /** 编辑器中预生成（不需要 Play） */
+    /** 编辑器中生成 */
     UFUNCTION(CallInEditor, Category = "GIS")
     void GenerateInEditor();
 
-    /** 编辑器中清除预览 */
+    /** 编辑器中清除 */
     UFUNCTION(CallInEditor, Category = "GIS")
     void ClearEditorPreview();
+
+    /** 生成并保存为 DataAsset */
+    UFUNCTION(CallInEditor, Category = "GIS")
+    void GenerateAndSaveDataAsset();
 #endif
 
 protected:
     virtual void BeginPlay() override;
 
 private:
-    /** 内部 Polygon 推导器 */
+    /** Polygon 推导器 */
     UPROPERTY()
     UPolygonDeriver* PolygonDeriver = nullptr;
 
-    /** 已生成的子 Actor 列表（用于清除） */
+    /** 数据源实例（由 WorldBuilder 持有） */
+    UPROPERTY()
+    ULocalFileProvider* LocalFileProviderInstance = nullptr;
+
+    UPROPERTY()
+    UArcGISRestProvider* ArcGISRestProviderInstance = nullptr;
+
+    /** 已生成的子 Actor */
     UPROPERTY()
     TArray<AActor*> SpawnedActors;
 
     /** 初始化推导器 */
     void InitDeriver();
 
-    /** 为每个 Polygon 创建子 Actor + GISPolygonComponent */
+    /** 创建并配置 DataProvider */
+    IGISDataProvider* CreateDataProvider();
+
+    /** 从 DataAsset 加载 polygon */
+    void LoadFromDataAsset();
+
+    /** 生成后处理 */
+    void PostGenerate();
+
+    /** 为每个 Polygon 创建子 Actor */
     void SpawnPolygonActors(const TArray<FLandUsePolygon>& Polygons);
 
     /** 绘制调试可视化 */
     void DrawDebugPolygons(const TArray<FLandUsePolygon>& Polygons) const;
 
-    /** 异步回调（UFUNCTION 因 Dynamic Delegate 需要） */
+    /** 异步回调 */
     UFUNCTION()
     void OnPolygonsGenerated(const TArray<FLandUsePolygon>& Polygons);
 
-    /** 获取土地类型对应的调试颜色 */
+    /** 获取土地类型颜色 */
     static FColor GetLandUseColor(ELandUseType Type);
 };

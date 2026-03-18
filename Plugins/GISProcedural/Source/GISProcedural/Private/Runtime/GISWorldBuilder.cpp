@@ -1,8 +1,17 @@
-// GISWorldBuilder.cpp - 纯 C++ 版世界构建器实现
+// GISWorldBuilder.cpp - 世界构建器实现
 #include "Runtime/GISWorldBuilder.h"
 #include "Components/GISPolygonComponent.h"
+#include "Data/LocalFileProvider.h"
+#include "Data/ArcGISRestProvider.h"
+#include "Data/LandUseMapDataAsset.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
+
+#if WITH_EDITOR
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "UObject/Package.h"
+#include "UObject/SavePackage.h"
+#endif
 
 AGISWorldBuilder::AGISWorldBuilder()
 {
@@ -42,45 +51,89 @@ void AGISWorldBuilder::InitDeriver()
     PolygonDeriver->TerrainAnalysisResolution = TerrainAnalysisResolution;
 }
 
+IGISDataProvider* AGISWorldBuilder::CreateDataProvider()
+{
+    switch (DataSourceType)
+    {
+        case EGISDataSourceType::LocalFile:
+        {
+            if (!LocalFileProviderInstance)
+            {
+                LocalFileProviderInstance = NewObject<ULocalFileProvider>(this);
+            }
+            LocalFileProviderInstance->GeoJsonFilePath =
+                FPaths::Combine(FPaths::ProjectContentDir(), GeoJsonPath);
+            LocalFileProviderInstance->DEMPath =
+                FPaths::Combine(FPaths::ProjectContentDir(), DEMPath);
+            LocalFileProviderInstance->DEMFormat = DEMFormat;
+            return LocalFileProviderInstance;
+        }
+
+        case EGISDataSourceType::ArcGISRest:
+        {
+            if (!ArcGISRestProviderInstance)
+            {
+                ArcGISRestProviderInstance = NewObject<UArcGISRestProvider>(this);
+            }
+            ArcGISRestProviderInstance->FeatureServiceUrl = FeatureServiceUrl;
+            ArcGISRestProviderInstance->ApiKey = ArcGISApiKey;
+            ArcGISRestProviderInstance->AdditionalLayerUrls = AdditionalLayerUrls;
+            return ArcGISRestProviderInstance;
+        }
+
+        case EGISDataSourceType::DataAsset:
+        default:
+            return nullptr;
+    }
+}
+
 void AGISWorldBuilder::GenerateAll()
 {
     ClearGenerated();
+
+    // DataAsset 模式：直接加载
+    if (DataSourceType == EGISDataSourceType::DataAsset)
+    {
+        LoadFromDataAsset();
+        PostGenerate();
+        return;
+    }
+
+    // DataProvider 模式
     InitDeriver();
+    IGISDataProvider* Provider = CreateDataProvider();
 
-    // 拼接完整路径
-    const FString FullDEMPath = FPaths::Combine(FPaths::ProjectContentDir(), DEMPath);
-    const FString FullGeoJsonPath = FPaths::Combine(FPaths::ProjectContentDir(), GeoJsonPath);
-
-    UE_LOG(LogTemp, Log, TEXT("GISWorldBuilder: DEM=%s, GeoJSON=%s"), *FullDEMPath, *FullGeoJsonPath);
-
-    // 同步生成（DEM 主导 + 矢量切割）
-    GeneratedPolygons = PolygonDeriver->GeneratePolygons(
-        FullDEMPath,
-        FullGeoJsonPath,
-        OriginLongitude,
-        OriginLatitude
-    );
-
-    UE_LOG(LogTemp, Log, TEXT("GISWorldBuilder: Generated %d polygons"), GeneratedPolygons.Num());
-
-    // 生成子 Actor
-    if (bSpawnPerPolygonActors)
+    if (Provider)
     {
-        SpawnPolygonActors(GeneratedPolygons);
+        PolygonDeriver->SetDataProvider(Provider);
+        PolygonDeriver->SetQueryBounds(QueryBounds);
+
+        UE_LOG(LogTemp, Log, TEXT("GISWorldBuilder: Using DataProvider '%s'"), *Provider->GetProviderName());
+        GeneratedPolygons = PolygonDeriver->GenerateFromProvider(OriginLongitude, OriginLatitude);
+    }
+    else
+    {
+        // 回退到传统文件路径模式
+        const FString FullDEMPath = FPaths::Combine(FPaths::ProjectContentDir(), DEMPath);
+        const FString FullGeoJsonPath = FPaths::Combine(FPaths::ProjectContentDir(), GeoJsonPath);
+
+        UE_LOG(LogTemp, Log, TEXT("GISWorldBuilder: Fallback to legacy mode DEM=%s, GeoJSON=%s"),
+            *FullDEMPath, *FullGeoJsonPath);
+
+        GeneratedPolygons = PolygonDeriver->GeneratePolygons(
+            FullDEMPath, FullGeoJsonPath,
+            OriginLongitude, OriginLatitude
+        );
     }
 
-    // 调试绘制
-    if (bDrawDebugPolygons)
-    {
-        DrawDebugPolygons(GeneratedPolygons);
-    }
-
-    PrintStatistics();
+    PostGenerate();
 }
 
 void AGISWorldBuilder::GenerateAllAsync()
 {
     ClearGenerated();
+
+    // 异步仅支持传统模式
     InitDeriver();
 
     const FString FullDEMPath = FPaths::Combine(FPaths::ProjectContentDir(), DEMPath);
@@ -99,8 +152,24 @@ void AGISWorldBuilder::GenerateAllAsync()
 void AGISWorldBuilder::OnPolygonsGenerated(const TArray<FLandUsePolygon>& Polygons)
 {
     GeneratedPolygons = Polygons;
+    PostGenerate();
+}
 
-    UE_LOG(LogTemp, Log, TEXT("GISWorldBuilder: Async generated %d polygons"), Polygons.Num());
+void AGISWorldBuilder::LoadFromDataAsset()
+{
+    if (!LandUseDataAsset)
+    {
+        UE_LOG(LogTemp, Error, TEXT("GISWorldBuilder: No DataAsset assigned"));
+        return;
+    }
+
+    GeneratedPolygons = LandUseDataAsset->Polygons;
+    UE_LOG(LogTemp, Log, TEXT("GISWorldBuilder: Loaded %d polygons from DataAsset"), GeneratedPolygons.Num());
+}
+
+void AGISWorldBuilder::PostGenerate()
+{
+    UE_LOG(LogTemp, Log, TEXT("GISWorldBuilder: %d polygons ready"), GeneratedPolygons.Num());
 
     if (bSpawnPerPolygonActors)
     {
@@ -117,7 +186,6 @@ void AGISWorldBuilder::OnPolygonsGenerated(const TArray<FLandUsePolygon>& Polygo
 
 void AGISWorldBuilder::ClearGenerated()
 {
-    // 销毁已生成的子 Actor
     for (AActor* Actor : SpawnedActors)
     {
         if (IsValid(Actor))
@@ -128,7 +196,6 @@ void AGISWorldBuilder::ClearGenerated()
     SpawnedActors.Empty();
     GeneratedPolygons.Empty();
 
-    // 清除调试绘制
     if (UWorld* World = GetWorld())
     {
         FlushPersistentDebugLines(World);
@@ -151,10 +218,7 @@ TArray<FLandUsePolygon> AGISWorldBuilder::GetPolygonsByType(ELandUseType Type) c
 void AGISWorldBuilder::SpawnPolygonActors(const TArray<FLandUsePolygon>& Polygons)
 {
     UWorld* World = GetWorld();
-    if (!World)
-    {
-        return;
-    }
+    if (!World) return;
 
     for (const FLandUsePolygon& Poly : Polygons)
     {
@@ -171,7 +235,6 @@ void AGISWorldBuilder::SpawnPolygonActors(const TArray<FLandUsePolygon>& Polygon
 
         if (PolygonActor)
         {
-            // 设置名称
             FString ActorLabel = FString::Printf(TEXT("GIS_Poly_%d_%s"),
                 Poly.PolygonID,
                 *UEnum::GetDisplayValueAsText(Poly.LandUseType).ToString());
@@ -180,7 +243,6 @@ void AGISWorldBuilder::SpawnPolygonActors(const TArray<FLandUsePolygon>& Polygon
             PolygonActor->SetActorLabel(ActorLabel);
 #endif
 
-            // 添加 GISPolygonComponent
             UGISPolygonComponent* Comp = NewObject<UGISPolygonComponent>(
                 PolygonActor, UGISPolygonComponent::StaticClass(),
                 FName(*ActorLabel));
@@ -188,7 +250,6 @@ void AGISWorldBuilder::SpawnPolygonActors(const TArray<FLandUsePolygon>& Polygon
             Comp->RegisterComponent();
             PolygonActor->AddInstanceComponent(Comp);
 
-            // 挂载到 WorldBuilder 下
             PolygonActor->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 
             SpawnedActors.Add(PolygonActor);
@@ -201,17 +262,13 @@ void AGISWorldBuilder::SpawnPolygonActors(const TArray<FLandUsePolygon>& Polygon
 void AGISWorldBuilder::DrawDebugPolygons(const TArray<FLandUsePolygon>& Polygons) const
 {
     UWorld* World = GetWorld();
-    if (!World)
-    {
-        return;
-    }
+    if (!World) return;
 
     for (const FLandUsePolygon& Poly : Polygons)
     {
         const FColor Color = GetLandUseColor(Poly.LandUseType);
         const int32 N = Poly.WorldVertices.Num();
 
-        // 画边框
         for (int32 i = 0; i < N; ++i)
         {
             const int32 Next = (i + 1) % N;
@@ -220,14 +277,13 @@ void AGISWorldBuilder::DrawDebugPolygons(const TArray<FLandUsePolygon>& Polygons
                 Poly.WorldVertices[i],
                 Poly.WorldVertices[Next],
                 Color,
-                (DebugDrawDuration < 0.0f),  // persistent if duration < 0
+                (DebugDrawDuration < 0.0f),
                 DebugDrawDuration,
                 0,
                 4.0f
             );
         }
 
-        // 在中心画标签
         DrawDebugString(
             World,
             Poly.WorldCenter + FVector(0, 0, 200),
@@ -252,7 +308,6 @@ void AGISWorldBuilder::PrintStatistics() const
         return;
     }
 
-    // 按类型统计
     TMap<ELandUseType, int32> CountMap;
     TMap<ELandUseType, float> AreaMap;
     float TotalArea = 0.0f;
@@ -289,21 +344,95 @@ void AGISWorldBuilder::ClearEditorPreview()
 {
     ClearGenerated();
 }
+
+void AGISWorldBuilder::GenerateAndSaveDataAsset()
+{
+    // 先生成
+    if (DataSourceType == EGISDataSourceType::DataAsset)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("GISWorldBuilder: Cannot generate from DataAsset mode, switch to LocalFile or ArcGIS first"));
+        return;
+    }
+
+    GenerateAll();
+
+    if (GeneratedPolygons.Num() == 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("GISWorldBuilder: No polygons to save"));
+        return;
+    }
+
+    // 创建或更新 DataAsset
+    const FString PackagePath = TEXT("/Game/GISData/");
+    const FString AssetName = FString::Printf(TEXT("LandUse_%s"),
+        *GetActorLabel().Replace(TEXT(" "), TEXT("_")));
+    const FString FullPath = PackagePath + AssetName;
+
+    UPackage* Package = CreatePackage(*FullPath);
+    if (!Package)
+    {
+        UE_LOG(LogTemp, Error, TEXT("GISWorldBuilder: Failed to create package %s"), *FullPath);
+        return;
+    }
+
+    ULandUseMapDataAsset* DataAsset = NewObject<ULandUseMapDataAsset>(
+        Package, FName(*AssetName), RF_Public | RF_Standalone);
+
+    DataAsset->Polygons = GeneratedPolygons;
+    DataAsset->OriginLongitude = OriginLongitude;
+    DataAsset->OriginLatitude = OriginLatitude;
+    DataAsset->SourceBounds = QueryBounds;
+    DataAsset->GeneratedTime = FDateTime::Now();
+
+    // 记录数据源
+    if (DataSourceType == EGISDataSourceType::LocalFile)
+    {
+        DataAsset->SourceProvider = FString::Printf(TEXT("LocalFile: %s"), *GeoJsonPath);
+    }
+    else if (DataSourceType == EGISDataSourceType::ArcGISRest)
+    {
+        DataAsset->SourceProvider = FString::Printf(TEXT("ArcGIS: %s"), *FeatureServiceUrl);
+    }
+
+    // 保存
+    FAssetRegistryModule::AssetCreated(DataAsset);
+    DataAsset->MarkPackageDirty();
+
+    const FString PackageFilePath = FPackageName::LongPackageNameToFilename(
+        FullPath, FPackageName::GetAssetPackageExtension());
+
+    FSavePackageArgs SaveArgs;
+    SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+    const bool bSaved = UPackage::SavePackage(Package, DataAsset, *PackageFilePath, SaveArgs);
+
+    if (bSaved)
+    {
+        UE_LOG(LogTemp, Log, TEXT("GISWorldBuilder: Saved DataAsset to %s (%d polygons)"),
+            *PackageFilePath, GeneratedPolygons.Num());
+
+        // 自动设置引用
+        LandUseDataAsset = DataAsset;
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("GISWorldBuilder: Failed to save DataAsset to %s"), *PackageFilePath);
+    }
+}
 #endif
 
 FColor AGISWorldBuilder::GetLandUseColor(ELandUseType Type)
 {
     switch (Type)
     {
-        case ELandUseType::Residential: return FColor(255, 235, 59);   // 黄色
-        case ELandUseType::Commercial:  return FColor(244, 67, 54);    // 红色
-        case ELandUseType::Industrial:  return FColor(255, 152, 0);    // 橙色
-        case ELandUseType::Forest:      return FColor(76, 175, 80);    // 绿色
-        case ELandUseType::Farmland:    return FColor(139, 195, 74);   // 浅绿
-        case ELandUseType::Water:       return FColor(33, 150, 243);   // 蓝色
-        case ELandUseType::Road:        return FColor(158, 158, 158);  // 灰色
-        case ELandUseType::OpenSpace:   return FColor(224, 224, 224);  // 浅灰
-        case ELandUseType::Military:    return FColor(120, 0, 0);      // 深红
+        case ELandUseType::Residential: return FColor(255, 235, 59);
+        case ELandUseType::Commercial:  return FColor(244, 67, 54);
+        case ELandUseType::Industrial:  return FColor(255, 152, 0);
+        case ELandUseType::Forest:      return FColor(76, 175, 80);
+        case ELandUseType::Farmland:    return FColor(139, 195, 74);
+        case ELandUseType::Water:       return FColor(33, 150, 243);
+        case ELandUseType::Road:        return FColor(158, 158, 158);
+        case ELandUseType::OpenSpace:   return FColor(224, 224, 224);
+        case ELandUseType::Military:    return FColor(120, 0, 0);
         default:                        return FColor(200, 200, 200);
     }
 }

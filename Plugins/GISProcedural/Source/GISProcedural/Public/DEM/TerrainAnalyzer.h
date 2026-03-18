@@ -139,6 +139,22 @@ public:
         double OriginLon, double OriginLat
     );
 
+    /**
+     * 从已有高程网格执行地形分析（DataProvider 模式用）
+     * @param ElevGrid 高程数据（行优先）
+     * @param Width/Height 网格尺寸
+     * @param MinLon/MinLat/MaxLon/MaxLat 地理范围
+     * @param OriginLon/OriginLat 坐标转换原点
+     * @return 地形分区数组
+     */
+    TArray<FTerrainZone> AnalyzeFromGrid(
+        const TArray<float>& ElevGrid,
+        int32 Width, int32 Height,
+        double MinLon, double MinLat,
+        double MaxLon, double MaxLat,
+        double OriginLon, double OriginLat
+    );
+
     // ============ 分步接口 ============
 
     /** Step 1: 从 DEM 生成高程网格 */
