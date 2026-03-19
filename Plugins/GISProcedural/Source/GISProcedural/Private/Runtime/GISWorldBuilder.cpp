@@ -81,6 +81,13 @@ IGISDataProvider* AGISWorldBuilder::CreateDataProvider()
             return ArcGISRestProviderInstance;
         }
 
+        case EGISDataSourceType::TiledFile:
+        {
+            // TiledFileProvider 将由协作者（小城）在 Phase 2 实现
+            UE_LOG(LogTemp, Warning, TEXT("GISWorldBuilder: TiledFile provider not yet implemented (Phase 2)"));
+            return nullptr;
+        }
+
         case EGISDataSourceType::DataAsset:
         default:
             return nullptr;

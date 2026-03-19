@@ -64,16 +64,55 @@ DEM tiles ────────→ QueryElevation   TerrainAnalyzer          
 | TerrainAnalyzer | 100% | Elevation grid → slope → classify → CCL → boundary polygons |
 | PolygonDeriver | 100% | Terrain zone + vector cutting (Sutherland-Hodgman variant) |
 | RoadNetworkGraph | 100% | Planar graph with intersection detection and edge splitting |
-| LandUseClassifier | 100% | 9-rule classification + PCG parameter assignment |
+| LandUseClassifier | 100% | 9-rule classification + PCG param assignment + LandCover fusion |
 | LocalFileProvider | 100% | Local GeoJSON + DEM with caching |
 | ArcGISRestProvider | 100% | HTTP queries, pagination, multi-layer |
-| PCGGISNode | 100% | Grid sampling with point-in-polygon, 4 metadata attributes |
-| GISWorldBuilder | 100% | 3-mode orchestrator, editor preview, async generation |
+| PCGGISNode | 100% | Grid sampling with point-in-polygon, tiling-ready config |
+| GISWorldBuilder | 100% | 4-mode orchestrator (LocalFile/ArcGIS/DataAsset/TiledFile) |
 | LandUseMapDataAsset | 100% | Persistent polygon storage with spatial queries |
-| GISCoordinate | 100% | Geo ↔ UE5 world coordinate conversion |
+| GISCoordinate | 100% | Geo ↔ UE5 world + WGS84 ↔ UTM conversion |
 | GISPolygonComponent | 100% | Actor component with debug visualization |
+| **TileManifest** | **NEW** | Shared tile metadata types for streaming pipeline |
+| **LandCoverGrid** | **NEW** | ESA WorldCover raster types for land cover fusion |
 
 See [`Plugins/GISProcedural/README.md`](Plugins/GISProcedural/README.md) for detailed algorithm documentation.
+
+## Scaling Roadmap (Global Military Simulation)
+
+The plugin follows a 4-phase plan to scale from ~10 km² demos to global coverage:
+
+| Phase | Scope | Owner |
+|-------|-------|-------|
+| **P0** Interface Contracts | Shared types, UTM projection, LandCover fusion API | 鹰飞 (existing files) |
+| **P1** External Preprocessing | Python/GDAL pipeline: PBF→GeoJSON, DEM tiling, WorldCover | 小城 (new files) |
+| **P2** TiledFileProvider + Spatial Index | Tile manifest parser, R-tree spatial index, LRU cache | 小城 (new files) |
+| **P3** World Partition Integration | WP streaming source, level-instance tile actors | 鹰飞 (existing files) |
+
+See [`PLAN.md`](PLAN.md) for the full collaboration plan.
+
+## Development Workflow
+
+```
+1. Prepare GIS data
+   overpass-turbo → GeoJSON export
+   OpenTopography / SRTM → DEM tiles
+   ESA WorldCover → LandCover GeoTIFF (optional, 10m resolution)
+
+2. (P1+) Run preprocessing pipeline
+   python Tools/preprocess.py --input ./RawData --output Content/GISData/Region_01 --tile-size 1024
+
+3. Editor: Generate & Preview
+   Drop AGISWorldBuilder → Set DataSourceType → GenerateInEditor → visual check
+
+4. Editor: Bake to DataAsset
+   GenerateAndSaveDataAsset → ULandUseMapDataAsset persisted under /Game/GISData/
+
+5. PCG Graph
+   GIS Land Use Sampler node → Attribute Filter → Building/Tree/Road spawners
+
+6. (P3+) Runtime Streaming
+   World Partition auto-loads tile DataAssets as player moves
+```
 
 ## Tech Stack
 
@@ -81,7 +120,9 @@ See [`Plugins/GISProcedural/README.md`](Plugins/GISProcedural/README.md) for det
 - **PCG**: UE5 Procedural Content Generation Framework
 - **Data Formats**: GeoJSON, GeoTIFF, PNG Heightmap (Mapbox Terrain RGB), RAW (.r16/.r32), SRTM HGT
 - **Online Services**: ArcGIS REST Feature Services
-- **Language**: C++ (UE5 plugin), no external dependencies beyond UE5
+- **Preprocessing**: Python 3.10+, GDAL/OGR, osmium-tool (Phase 1+)
+- **Projection**: WGS84 ↔ UTM (built-in), Simplified Mercator for local regions
+- **Language**: C++ (UE5 plugin), Python (external preprocessing)
 
 ## License
 

@@ -95,6 +95,24 @@ public:
     UFUNCTION(BlueprintCallable, Category = "GISProcedural|Classify")
     static void AssignPCGParameters(UPARAM(ref) TArray<FLandUsePolygon>& Polygons, const ULandUseClassifyRules* Rules);
 
+    /**
+     * 融合 LandCover 栅格数据来修正分类结果
+     * 使用 ESA WorldCover 类码对每个 Polygon 进行多数投票，
+     * 当栅格数据与矢量推导结果不一致时，优先信任栅格。
+     *
+     * @param Polygons       待修正的 Polygon 数组
+     * @param ClassGrid      LandCover 分类栅格（ESA WorldCover 类码，行优先）
+     * @param GridWidth      栅格宽度
+     * @param GridHeight     栅格高度
+     * @param GridBounds     栅格覆盖的地理范围
+     */
+    UFUNCTION(BlueprintCallable, Category = "GISProcedural|Classify")
+    static void FuseLandCoverData(
+        UPARAM(ref) TArray<FLandUsePolygon>& Polygons,
+        const TArray<uint8>& ClassGrid,
+        int32 GridWidth, int32 GridHeight,
+        const FBox2D& GridBounds);
+
 private:
     /**
      * 分类算法核心逻辑（按优先级排列）：
