@@ -3,6 +3,7 @@
 #include "Components/GISPolygonComponent.h"
 #include "Data/LocalFileProvider.h"
 #include "Data/ArcGISRestProvider.h"
+#include "Data/TiledFileProvider.h"
 #include "Data/LandUseMapDataAsset.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
@@ -83,45 +84,26 @@ IGISDataProvider* AGISWorldBuilder::CreateDataProvider()
 
         case EGISDataSourceType::TiledFile:
         {
-            // TiledFileProvider 由协作者（小城）在 Phase 2 实现
-            // 通过反射查找，避免编译时硬依赖尚未创建的类
-            static UClass* TiledFileProviderClass = FindObject<UClass>(
-                ANY_PACKAGE, TEXT("TiledFileProvider"));
-
-            if (!TiledFileProviderClass)
+            if (!TiledFileProviderInstance)
             {
-                UE_LOG(LogTemp, Warning,
-                    TEXT("GISWorldBuilder: UTiledFileProvider class not found. "
-                         "Ensure the TiledFileProvider module (Phase 2) is compiled."));
-                return nullptr;
+                TiledFileProviderInstance = NewObject<UTiledFileProvider>(this);
             }
 
-            if (!TiledFileProviderInstance || !TiledFileProviderInstance->IsA(TiledFileProviderClass))
-            {
-                TiledFileProviderInstance = NewObject<UObject>(this, TiledFileProviderClass);
-            }
+            UTiledFileProvider* TiledProvider = CastChecked<UTiledFileProvider>(TiledFileProviderInstance);
+            TiledProvider->ManifestPath = FPaths::Combine(
+                FPaths::ProjectContentDir(), TileManifestPath);
 
-            // 通过反射设置 ManifestPath 属性
-            if (FProperty* ManifestProp = TiledFileProviderClass->FindPropertyByName(TEXT("ManifestPath")))
+            if (!TiledProvider->IsInitialized())
             {
-                const FString FullManifestPath = FPaths::Combine(
-                    FPaths::ProjectContentDir(), TileManifestPath);
-                FStrProperty* StrProp = CastField<FStrProperty>(ManifestProp);
-                if (StrProp)
+                if (!TiledProvider->Initialize())
                 {
-                    StrProp->SetPropertyValue_InContainer(TiledFileProviderInstance, FullManifestPath);
+                    UE_LOG(LogTemp, Error,
+                        TEXT("GISWorldBuilder: Failed to initialize TiledFileProvider"));
+                    return nullptr;
                 }
             }
 
-            // UTiledFileProvider 应实现 IGISDataProvider
-            IGISDataProvider* Provider = Cast<IGISDataProvider>(TiledFileProviderInstance);
-            if (!Provider)
-            {
-                UE_LOG(LogTemp, Error,
-                    TEXT("GISWorldBuilder: UTiledFileProvider does not implement IGISDataProvider"));
-                return nullptr;
-            }
-            return Provider;
+            return static_cast<IGISDataProvider*>(TiledProvider);
         }
 
         case EGISDataSourceType::DataAsset:

@@ -91,4 +91,19 @@ struct GISPROCEDURAL_API FTileManifest
     /** 网格行数 */
     UPROPERTY(BlueprintReadWrite, Category = "GIS|Tile")
     int32 NumRows = 0;
+
+    /** 从 JSON 文件解析 tile_manifest.json */
+    static bool LoadFromFile(const FString& FilePath, FTileManifest& OutManifest);
+
+    /** 从 JSON 字符串解析 */
+    static bool ParseFromJson(const FString& JsonString, FTileManifest& OutManifest);
+
+    /** 按坐标查找 tile（线性搜索，小规模使用） */
+    const FTileEntry* FindTile(int32 Col, int32 Row) const;
+
+    /** 查找与给定地理范围相交的所有 tile */
+    TArray<const FTileEntry*> FindTilesInBounds(const FGeoRect& Bounds) const;
+
+    /** 是否有效 */
+    bool IsValid() const { return Tiles.Num() > 0 && TileSizeM > 0.0f; }
 };

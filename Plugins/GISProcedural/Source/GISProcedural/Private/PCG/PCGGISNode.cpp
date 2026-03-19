@@ -101,9 +101,10 @@ bool FPCGGISLandUseSamplerElement::ExecuteInternal(FPCGContext* Context) const
         const FBox ComponentBounds = Context->SourceComponent->Bounds.GetBox();
         const float TileHalfExtent = Settings->TileSizeM * 100.0f * Settings->LoadRadius;
         const FVector Center = ComponentBounds.GetCenter();
+        constexpr float LargeZ = 1e10f;
         const FBox LoadBounds(
-            Center - FVector(TileHalfExtent, TileHalfExtent, HALF_WORLD_MAX),
-            Center + FVector(TileHalfExtent, TileHalfExtent, HALF_WORLD_MAX));
+            Center - FVector(TileHalfExtent, TileHalfExtent, LargeZ),
+            Center + FVector(TileHalfExtent, TileHalfExtent, LargeZ));
 
         TileFilteredPolygons = DataAsset->GetPolygonsInWorldBounds(LoadBounds);
         PolygonsToSample = &TileFilteredPolygons;
