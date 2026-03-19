@@ -110,7 +110,7 @@ bool UDEMParser::GetElevationGrid(
         return false;
     }
 
-    // 估算每度经度对应的米数
+    // WGS84 椭球体近似：赤道处 1° 经度 ≈ 111320m，1° 纬度 ≈ 110540m
     const double CenterLat = (MinLat + MaxLat) / 2.0;
     const double MetersPerDegreeLon = 111320.0 * FMath::Cos(FMath::DegreesToRadians(CenterLat));
     const double MetersPerDegreeLat = 110540.0;
@@ -319,7 +319,7 @@ bool UDEMParser::ParseHeightmapPNG(const FString& FilePath, FDEMTileInfo& OutInf
         {
             case EPNGHeightEncoding::Grayscale16:
             {
-                // 灰度：用 R 通道（8bit → 假设 0~255 映射到 0~8848m）
+                // 灰度：用 R 通道（8bit → 0~255 映射到 0~8848m，即珠穆朗玛峰海拔）
                 // 实际应使用 16bit 灰度，这里做 8bit 降级
                 Elevation = static_cast<float>(R) / 255.0f * 8848.0f;
                 break;

@@ -152,9 +152,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GISProcedural|Config")
     float TerrainAnalysisResolution = 30.0f;
 
-    /** 分类规则配置 */
+    /** 分类规则配置（UPROPERTY 确保 GC 追踪） */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GISProcedural|Config")
-    ULandUseClassifyRules* ClassifyRules = nullptr;
+    TObjectPtr<ULandUseClassifyRules> ClassifyRules = nullptr;
 
     // ======== 调试输出 ========
 
@@ -194,8 +194,8 @@ private:
     /** 构建的道路网络图 */
     TSharedPtr<FRoadNetworkGraph> RoadGraph;
 
-    /** Polygon ID 计数器 */
-    int32 NextPolygonID = 0;
+    /** Polygon ID 计数器（线程安全） */
+    FThreadSafeCounter NextPolygonID;
 
     // ---- 内部方法 ----
 

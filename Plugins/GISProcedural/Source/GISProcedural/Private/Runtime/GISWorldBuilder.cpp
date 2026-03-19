@@ -3,6 +3,7 @@
 #include "Components/GISPolygonComponent.h"
 #include "Data/LocalFileProvider.h"
 #include "Data/ArcGISRestProvider.h"
+#include "Data/TiledFileProvider.h"
 #include "Data/LandUseMapDataAsset.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
@@ -79,6 +80,30 @@ IGISDataProvider* AGISWorldBuilder::CreateDataProvider()
             ArcGISRestProviderInstance->ApiKey = ArcGISApiKey;
             ArcGISRestProviderInstance->AdditionalLayerUrls = AdditionalLayerUrls;
             return ArcGISRestProviderInstance;
+        }
+
+        case EGISDataSourceType::TiledFile:
+        {
+            if (!TiledFileProviderInstance)
+            {
+                TiledFileProviderInstance = NewObject<UTiledFileProvider>(this);
+            }
+
+            UTiledFileProvider* TiledProvider = CastChecked<UTiledFileProvider>(TiledFileProviderInstance);
+            TiledProvider->ManifestPath = FPaths::Combine(
+                FPaths::ProjectContentDir(), TileManifestPath);
+
+            if (!TiledProvider->IsInitialized())
+            {
+                if (!TiledProvider->Initialize())
+                {
+                    UE_LOG(LogTemp, Error,
+                        TEXT("GISWorldBuilder: Failed to initialize TiledFileProvider"));
+                    return nullptr;
+                }
+            }
+
+            return static_cast<IGISDataProvider*>(TiledProvider);
         }
 
         case EGISDataSourceType::DataAsset:
@@ -393,6 +418,13 @@ void AGISWorldBuilder::GenerateAndSaveDataAsset()
     {
         DataAsset->SourceProvider = FString::Printf(TEXT("ArcGIS: %s"), *FeatureServiceUrl);
     }
+    else if (DataSourceType == EGISDataSourceType::TiledFile)
+    {
+        DataAsset->SourceProvider = FString::Printf(TEXT("TiledFile: %s"), *TileManifestPath);
+    }
+
+    // 自动构建空间索引以加速运行时查询
+    DataAsset->BuildSpatialIndex();
 
     // 保存
     FAssetRegistryModule::AssetCreated(DataAsset);

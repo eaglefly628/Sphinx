@@ -7,6 +7,7 @@
 #include "Polygon/PolygonDeriver.h"
 #include "Polygon/LandUseClassifier.h"
 #include "Data/IGISDataProvider.h"
+#include "Data/TiledFileProvider.h"
 #include "GISWorldBuilder.generated.h"
 
 class UGISPolygonComponent;
@@ -26,6 +27,9 @@ enum class EGISDataSourceType : uint8
 
     /** 已有 DataAsset（跳过生成，直接加载） */
     DataAsset     UMETA(DisplayName = "DataAsset"),
+
+    /** 预处理瓦片集（tile_manifest.json，支持大规模区域） */
+    TiledFile     UMETA(DisplayName = "Tiled File"),
 };
 
 /**
@@ -87,6 +91,13 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|DataSource|ArcGIS",
         meta = (EditCondition = "DataSourceType == EGISDataSourceType::ArcGISRest"))
     TArray<FString> AdditionalLayerUrls;
+
+    // ---- TiledFile 模式 ----
+
+    /** Tile Manifest 路径（tile_manifest.json） */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|DataSource|TiledFile",
+        meta = (EditCondition = "DataSourceType == EGISDataSourceType::TiledFile"))
+    FString TileManifestPath = TEXT("GISData/Region_01/tile_manifest.json");
 
     // ---- DataAsset 模式 ----
 
@@ -200,6 +211,10 @@ private:
 
     UPROPERTY()
     UArcGISRestProvider* ArcGISRestProviderInstance = nullptr;
+
+    /** TiledFile 数据源实例 */
+    UPROPERTY()
+    UTiledFileProvider* TiledFileProviderInstance = nullptr;
 
     /** 已生成的子 Actor */
     UPROPERTY()

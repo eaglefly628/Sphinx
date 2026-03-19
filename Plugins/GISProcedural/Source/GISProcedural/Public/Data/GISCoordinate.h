@@ -52,6 +52,31 @@ public:
     UFUNCTION(BlueprintCallable, Category = "GISProcedural|Coordinate")
     static double HaversineDistance(double Lon1, double Lat1, double Lon2, double Lat2);
 
+    /**
+     * 经纬度 → UTM 坐标（自动计算 Zone）
+     * @param Lon            经度
+     * @param Lat            纬度
+     * @param OutZoneNumber  输出 UTM Zone (1-60)
+     * @param OutEasting     输出 Easting (m)
+     * @param OutNorthing    输出 Northing (m)
+     * @return 是否成功
+     */
+    UFUNCTION(BlueprintCallable, Category = "GISProcedural|Coordinate")
+    static bool GeoToUTM(double Lon, double Lat, int32& OutZoneNumber, double& OutEasting, double& OutNorthing);
+
+    /**
+     * UTM 坐标 → 经纬度
+     * @param ZoneNumber           UTM Zone (1-60)
+     * @param Easting              Easting (m)
+     * @param Northing             Northing (m)
+     * @param bNorthernHemisphere  是否北半球
+     * @param OutLon               输出经度
+     * @param OutLat               输出纬度
+     * @return 是否成功
+     */
+    UFUNCTION(BlueprintCallable, Category = "GISProcedural|Coordinate")
+    static bool UTMToGeo(int32 ZoneNumber, double Easting, double Northing, bool bNorthernHemisphere, double& OutLon, double& OutLat);
+
 private:
     /** 投影原点经度 */
     double OriginLongitude = 0.0;
@@ -67,6 +92,12 @@ private:
 
     /** 地球半径（米） */
     static constexpr double EarthRadius = 6371000.0;
+
+    /** WGS84 椭球长轴（米） */
+    static constexpr double WGS84_A = 6378137.0;
+
+    /** WGS84 第一偏心率平方 */
+    static constexpr double WGS84_E2 = 0.00669437999014;
 
     /** UE5 使用厘米为单位 */
     static constexpr double MetersToCm = 100.0;

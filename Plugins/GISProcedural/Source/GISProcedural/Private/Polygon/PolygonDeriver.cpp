@@ -144,7 +144,7 @@ TArray<FLandUsePolygon> UPolygonDeriver::GenerateFromVectorsOnly(double OriginLo
         }
 
         FLandUsePolygon Poly;
-        Poly.PolygonID = NextPolygonID++;
+        Poly.PolygonID = NextPolygonID.Increment();
         Poly.WorldVertices = WorldVerts;
         Poly.GeoVertices = Feature.Coordinates;
         Poly.AreaSqM = AreaSqM;
@@ -460,7 +460,7 @@ TArray<FLandUsePolygon> UPolygonDeriver::CutZonesWithVectors(double OriginLon, d
             }
 
             FLandUsePolygon Poly;
-            Poly.PolygonID = NextPolygonID++;
+            Poly.PolygonID = NextPolygonID.Increment();
             Poly.WorldVertices = SubPoly;
             Poly.AreaSqM = AreaSqM;
             Poly.WorldCenter = ComputePolygonCenter(SubPoly);
@@ -547,6 +547,7 @@ bool UPolygonDeriver::BuildRoadGraph()
         TArray<int32> NodeIDs;
         for (const FVector2D& Coord : Feature.Coordinates)
         {
+            // 经纬度 × 100000 近似转为米级坐标（仅用于道路图节点合并）
             FVector WorldPos(Coord.X * 100000.0, Coord.Y * 100000.0, 0.0);
             int32 ExistingNodeID = RoadGraph->FindNearestNode(WorldPos, NodeMergeTolerance);
             if (ExistingNodeID != INDEX_NONE)
@@ -679,6 +680,7 @@ static bool SplitPolygonBySegment(
 
     // 用线段所在直线（延长至无穷）做 Sutherland-Hodgman 切割
     // 扩展线段方向以确保覆盖整个多边形
+    // 延长切割线至足够远（100万 cm = 10 km），确保覆盖整个多边形
     const FVector Dir = (SegB - SegA).GetSafeNormal() * 1000000.0f;
     const FVector ExtA = SegA - Dir;
     const FVector ExtB = SegB + Dir;
@@ -737,7 +739,8 @@ TArray<TArray<FVector>> UPolygonDeriver::CutPolygonWithLines(
         if (Poly.Num() >= 3)
         {
             const float Area = FMath::Abs(ComputePolygonArea(Poly));
-            if (Area > 100.0f) // 至少 0.01 平方米（/10000 后），避免碎片
+            // 100 cm² = 0.01 m²（ComputePolygonArea 返回 cm² 量级），过滤切割碎片
+            if (Area > 100.0f)
             {
                 Result.Add(Poly);
             }
@@ -774,12 +777,21 @@ void UPolygonDeriver::MarkWaterBodies(TArray<FLandUsePolygon>& Polygons) const
                 GeoCenter /= Poly.GeoVertices.Num();
 
                 const TArray<FVector2D>& WaterCoords = WaterFeature.Coordinates;
+                if (WaterCoords.Num() < 3)
+                {
+                    continue; // 退化多边形跳过
+                }
                 bool bInside = false;
                 for (int32 i = 0, j = WaterCoords.Num() - 1; i < WaterCoords.Num(); j = i++)
                 {
+                    const double DenomY = WaterCoords[j].Y - WaterCoords[i].Y;
+                    if (FMath::Abs(DenomY) < KINDA_SMALL_NUMBER)
+                    {
+                        continue; // 水平边跳过，避免除零
+                    }
                     if (((WaterCoords[i].Y > GeoCenter.Y) != (WaterCoords[j].Y > GeoCenter.Y)) &&
                         (GeoCenter.X < (WaterCoords[j].X - WaterCoords[i].X) *
-                         (GeoCenter.Y - WaterCoords[i].Y) / (WaterCoords[j].Y - WaterCoords[i].Y) +
+                         (GeoCenter.Y - WaterCoords[i].Y) / DenomY +
                          WaterCoords[i].X))
                     {
                         bInside = !bInside;

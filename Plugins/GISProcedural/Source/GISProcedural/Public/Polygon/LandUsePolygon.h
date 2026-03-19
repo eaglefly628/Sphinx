@@ -30,6 +30,10 @@ struct GISPROCEDURAL_API FLandUsePolygon
     UPROPERTY(BlueprintReadWrite, Category = "GIS")
     int32 PolygonID = 0;
 
+    /** 源瓦片坐标 (col, row)，-1 表示未分块 */
+    UPROPERTY(BlueprintReadWrite, Category = "GIS")
+    FIntPoint TileCoord = FIntPoint(-1, -1);
+
     /** 土地分类 */
     UPROPERTY(BlueprintReadWrite, Category = "GIS")
     ELandUseType LandUseType = ELandUseType::Unknown;
@@ -49,6 +53,10 @@ struct GISPROCEDURAL_API FLandUsePolygon
     /** 中心点 */
     UPROPERTY(BlueprintReadWrite, Category = "GIS")
     FVector WorldCenter = FVector::ZeroVector;
+
+    /** 世界空间 AABB 包围盒 */
+    UPROPERTY(BlueprintReadWrite, Category = "GIS")
+    FBox WorldBounds = FBox(EForceInit::ForceInit);
 
     /** 平均海拔 */
     UPROPERTY(BlueprintReadWrite, Category = "GIS")

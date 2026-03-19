@@ -47,6 +47,24 @@ public:
         return false;
     }
 
+    /**
+     * 查询指定范围内的土地覆盖栅格数据（可选实现）
+     * @param Bounds       查询的地理范围
+     * @param Resolution   栅格分辨率（米）
+     * @param OutClassGrid 输出分类栅格（ESA WorldCover 类码，行优先）
+     * @param OutWidth     输出栅格宽度
+     * @param OutHeight    输出栅格高度
+     * @return 是否成功（未实现时返回 false）
+     */
+    virtual bool QueryLandCover(
+        const FGeoRect& Bounds,
+        float Resolution,
+        TArray<uint8>& OutClassGrid,
+        int32& OutWidth, int32& OutHeight)
+    {
+        return false;
+    }
+
     /** 数据源名称（用于日志） */
     virtual FString GetProviderName() const = 0;
 

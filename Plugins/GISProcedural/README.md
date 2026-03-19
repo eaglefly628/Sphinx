@@ -55,6 +55,24 @@ ArcGIS REST  ──┘         │                  │         (.uasset)       
 2. Reference an existing `ULandUseMapDataAsset`
 3. Click **Generate In Editor**
 
+**Mode D: Tiled File (Large-scale)**
+
+1. Run the Python preprocessing pipeline to generate tiled data:
+   ```
+   python Tools/GISPreprocess/preprocess.py --input ./RawData \
+       --output Content/GISData/Region_01 --tile-size 1024 \
+       --origin-lon 121.47 --origin-lat 31.23
+   ```
+2. Option A: Use `AGISWorldBuilder`
+   - `DataSourceType` = TiledFile
+   - `TileManifestPath` = `GISData/Region_01/tile_manifest.json`
+   - Click **Generate And Save Data Asset**
+3. Option B: Use `ATiledWorldBuilder` (batch mode, recommended for large areas)
+   - Drag `ATiledWorldBuilder` into the level
+   - Set `ManifestPath`, `ClassifyRules`
+   - Click **Generate All Tiles**
+   - Produces per-tile DataAssets + a `UTiledLandUseMapDataAsset` catalog
+
 ### Online (Runtime / PCG)
 
 1. Add **GIS Land Use Sampler** node in PCG Graph
@@ -79,11 +97,17 @@ ArcGIS REST  ──┘         │                  │         (.uasset)       
 | **TerrainAnalyzer** | 100% | 5-step pipeline: elevation grid -> slope/aspect -> classify -> CCL -> boundary extraction |
 | **PolygonDeriver** | 100% | Two-mode polygon generation with iterative Sutherland-Hodgman polygon-line cutting |
 | **RoadNetworkGraph** | 100% | Planar graph with O(n^2) intersection detection and edge splitting |
-| **LandUseClassifier** | 100% | 9-rule classification + PCG parameter assignment |
-| **PCGGISNode** | 100% | Grid sampling with point-in-polygon test, 4 metadata attributes |
-| **GISWorldBuilder** | 100% | 3-mode orchestrator (LocalFile / ArcGIS / DataAsset), editor preview, async generation |
-| **LandUseMapDataAsset** | 100% | Persistent polygon storage with spatial queries |
+| **LandUseClassifier** | 100% | 9-rule classification + PCG param assignment + ESA WorldCover raster fusion |
+| **PCGGISNode** | 100% | Grid sampling with point-in-polygon test, tile-aware execution, 4 metadata attributes |
+| **GISWorldBuilder** | 100% | 4-mode orchestrator (LocalFile / ArcGIS / DataAsset / TiledFile), editor preview, async |
+| **LandUseMapDataAsset** | 100% | Persistent polygon storage with grid spatial index + async tile loading |
 | **GISPolygonComponent** | 100% | Actor component with ray-cast point-in-polygon, debug visualization |
+| **TiledFileProvider** | 100% | Tile manifest reader, LRU-cached per-tile GeoJSON/LandCover loading |
+| **TileManifest** | 100% | JSON manifest parser, tile coordinate index, bounds query |
+| **RasterLandCoverParser** | 100% | ESA WorldCover JSON raster parser with majority-class voting |
+| **TiledLandUseMapDataAsset** | 100% | Per-tile DataAsset catalog with async streaming (FStreamableManager) |
+| **TiledWorldBuilder** | 100% | Editor batch tool: manifest → per-tile PolygonDeriver → DataAsset catalog |
+| **LandCoverGrid** | 100% | ESA WorldCover shared types (EWorldCoverClass, FLandCoverGrid) |
 
 ## Key Algorithms
 
@@ -129,7 +153,12 @@ Plugins/GISProcedural/
 │   │   │   ├── GeoJsonParser.h
 │   │   │   ├── LocalFileProvider.h
 │   │   │   ├── ArcGISRestProvider.h
-│   │   │   └── LandUseMapDataAsset.h
+│   │   │   ├── LandUseMapDataAsset.h
+│   │   │   ├── TileManifest.h
+│   │   │   ├── TiledFileProvider.h
+│   │   │   ├── TiledLandUseMapDataAsset.h
+│   │   │   ├── RasterLandCoverParser.h
+│   │   │   └── LandCoverGrid.h
 │   │   ├── DEM/
 │   │   │   ├── DEMTypes.h
 │   │   │   ├── DEMParser.h
@@ -145,7 +174,8 @@ Plugins/GISProcedural/
 │   │   ├── Components/
 │   │   │   └── GISPolygonComponent.h
 │   │   └── Runtime/
-│   │       └── GISWorldBuilder.h
+│   │       ├── GISWorldBuilder.h
+│   │       └── TiledWorldBuilder.h
 │   └── Private/
 │       ├── GISProceduralModule.cpp
 │       ├── Data/
@@ -153,7 +183,11 @@ Plugins/GISProcedural/
 │       │   ├── GeoJsonParser.cpp
 │       │   ├── LocalFileProvider.cpp
 │       │   ├── ArcGISRestProvider.cpp
-│       │   └── LandUseMapDataAsset.cpp
+│       │   ├── LandUseMapDataAsset.cpp
+│       │   ├── TileManifest.cpp
+│       │   ├── TiledFileProvider.cpp
+│       │   ├── TiledLandUseMapDataAsset.cpp
+│       │   └── RasterLandCoverParser.cpp
 │       ├── DEM/
 │       │   ├── DEMParser.cpp
 │       │   └── TerrainAnalyzer.cpp
@@ -167,10 +201,35 @@ Plugins/GISProcedural/
 │       ├── Components/
 │       │   └── GISPolygonComponent.cpp
 │       └── Runtime/
-│           └── GISWorldBuilder.cpp
+│           ├── GISWorldBuilder.cpp
+│           └── TiledWorldBuilder.cpp
 ```
+
+## Python Preprocessing Pipeline
+
+Located at `Tools/GISPreprocess/`. Converts raw GIS data into tiled format.
+
+```
+python preprocess.py --input ./RawData --output Content/GISData/Region_01 \
+    --tile-size 1024 --origin-lon 121.47 --origin-lat 31.23
+```
+
+| Script | Purpose |
+|--------|---------|
+| `preprocess.py` | Main entry point, orchestrates all steps |
+| `pbf_to_geojson.py` | PBF → GeoJSON via osmium/ogr2ogr |
+| `tile_cutter.py` | Vector tile cutting with cross-boundary feature tracking |
+| `projection.py` | WGS84 ↔ UTM conversion (matches UE5 GISCoordinate) |
+| `raster_classifier.py` | ESA WorldCover GeoTIFF → per-tile landcover.json |
+| `dem_cropper.py` | DEM GeoTIFF → per-tile 16bit PNG |
+| `manifest_writer.py` | Generates tile_manifest.json |
+| `validate.py` | Output integrity validation |
+
+**Dependencies**: Python 3.10+. Optional: GDAL (DEM/raster), osmium-tool (PBF).
 
 ## Known Limitations
 
 - **DEMParser GeoTIFF**: Simplified TIFF reader; full GeoTIFF support requires GDAL/libgeotiff integration. Workaround: use `ManualTileInfo` property or PNG/RAW formats.
 - **LandUseClassifier water detection**: Optional enhancement for water vector data; classification works without it using DEM-based water candidate detection.
+- **Multi-tile DEM merge**: TiledFileProvider currently returns single-tile DEM only; cross-tile DEM queries require future DEMParser enhancement.
+- **Multi-tile LandCover merge**: Cross-tile LandCover queries not yet supported; single-tile queries work correctly.

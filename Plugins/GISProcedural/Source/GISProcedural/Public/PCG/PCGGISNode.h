@@ -60,6 +60,22 @@ public:
     /** 只采样指定类型（Empty = 全部） */
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "GIS")
     TArray<ELandUseType> FilterTypes;
+
+    // ============ 瓦片流式加载配置（Phase 2+） ============
+
+    /** 是否启用瓦片流式加载（大规模地图时开启） */
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "GIS|Tiling")
+    bool bEnableTiling = false;
+
+    /** 瓦片尺寸（米），与 World Partition 网格对齐 */
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "GIS|Tiling",
+        meta = (ClampMin = "256.0", ClampMax = "4096.0", EditCondition = "bEnableTiling"))
+    float TileSizeM = 1024.0f;
+
+    /** 加载半径（瓦片数），玩家周围加载 N 圈瓦片 */
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "GIS|Tiling",
+        meta = (ClampMin = "1", ClampMax = "8", EditCondition = "bEnableTiling"))
+    int32 LoadRadius = 3;
 };
 
 /**

@@ -20,9 +20,8 @@ Sphinx transforms real geographic data — OpenStreetMap exports, DEM elevation 
 ## Architecture
 
 ```
-Data Sources              Editor (Offline)              Persistence           Runtime (Online)
-─────────────            ─────────────────             ───────────           ────────────────
-
+Mode A/B/C: Single-Region Pipeline
+───────────────────────────────────
 GeoJSON (OSM) ──┐
                 ├→ IGISDataProvider → PolygonDeriver → ULandUseMapDataAsset → PCG Sampler
 ArcGIS REST   ──┘         │                │            (.uasset)                │
@@ -35,6 +34,25 @@ DEM tiles ────────→ QueryElevation   TerrainAnalyzer          
                           │          LandUseClassifier                           └→ Water Mesh
                           │                │
                           └──────→ TArray<FLandUsePolygon>
+
+Mode D: Tiled Pipeline (Global Scale)
+──────────────────────────────────────
+Python Preprocessing (PBF/DEM/WorldCover)
+        │
+        ├→ tile_manifest.json
+        ├→ tiles/tile_X_Y.geojson
+        ├→ tiles/tile_X_Y_dem.png
+        └→ tiles/tile_X_Y_landcover.json
+                │
+    TiledFileProvider (LRU cache, dedup)
+                │
+    TiledWorldBuilder (Editor batch tool)
+                │
+    Per-tile ULandUseMapDataAsset (spatial index)
+                │
+    TiledLandUseMapDataAsset (async streaming catalog)
+                │
+        PCG Sampler (tile-aware, LoadRadius)
 ```
 
 ## Quick Start
@@ -55,6 +73,17 @@ DEM tiles ────────→ QueryElevation   TerrainAnalyzer          
 2. Enter Feature Service URL and API key
 3. **Generate And Save Data Asset** → same downstream PCG workflow
 
+### Tiled File Mode (Global Scale)
+
+1. Prepare raw data: OSM PBF, DEM GeoTIFF, ESA WorldCover GeoTIFF
+2. Run the Python preprocessing pipeline:
+   ```bash
+   python Tools/GISPreprocess/preprocess.py --input ./RawData --output Content/GISData/Region_01 --tile-size 1024
+   ```
+3. Set `DataSourceType = TiledFile`, point `TileManifestPath` to the generated `tile_manifest.json`
+4. Use `ATiledWorldBuilder` in editor to batch-generate per-tile DataAssets with land cover fusion
+5. Reference the `UTiledLandUseMapDataAsset` catalog in your PCG graph — tiles stream automatically
+
 ## Plugin: GISProcedural
 
 | Module | Status | Purpose |
@@ -64,16 +93,62 @@ DEM tiles ────────→ QueryElevation   TerrainAnalyzer          
 | TerrainAnalyzer | 100% | Elevation grid → slope → classify → CCL → boundary polygons |
 | PolygonDeriver | 100% | Terrain zone + vector cutting (Sutherland-Hodgman variant) |
 | RoadNetworkGraph | 100% | Planar graph with intersection detection and edge splitting |
-| LandUseClassifier | 100% | 9-rule classification + PCG parameter assignment |
+| LandUseClassifier | 100% | 9-rule classification + PCG param assignment + LandCover fusion |
 | LocalFileProvider | 100% | Local GeoJSON + DEM with caching |
 | ArcGISRestProvider | 100% | HTTP queries, pagination, multi-layer |
-| PCGGISNode | 100% | Grid sampling with point-in-polygon, 4 metadata attributes |
-| GISWorldBuilder | 100% | 3-mode orchestrator, editor preview, async generation |
+| PCGGISNode | 100% | Grid sampling with point-in-polygon, tiling-ready config |
+| GISWorldBuilder | 100% | 4-mode orchestrator (LocalFile/ArcGIS/DataAsset/TiledFile) |
 | LandUseMapDataAsset | 100% | Persistent polygon storage with spatial queries |
-| GISCoordinate | 100% | Geo ↔ UE5 world coordinate conversion |
+| GISCoordinate | 100% | Geo ↔ UE5 world + WGS84 ↔ UTM conversion |
 | GISPolygonComponent | 100% | Actor component with debug visualization |
+| **TileManifest** | 100% | Tile manifest JSON parser, geo-bounds queries |
+| **LandCoverGrid** | 100% | ESA WorldCover raster types for land cover fusion |
+| **TiledFileProvider** | 100% | Tile-based data provider with LRU cache, cross-tile dedup |
+| **RasterLandCoverParser** | 100% | Parse landcover.json, majority-class region queries |
+| **TiledLandUseMapDataAsset** | 100% | Per-tile DataAsset catalog, async streaming via FStreamableManager |
+| **TiledWorldBuilder** | 100% | Editor batch tool: manifest → per-tile DataAsset generation |
 
 See [`Plugins/GISProcedural/README.md`](Plugins/GISProcedural/README.md) for detailed algorithm documentation.
+
+## Scaling Roadmap (Global Military Simulation)
+
+All 4 phases are implemented. The plugin scales from ~10 km² demos to global coverage:
+
+| Phase | Scope | Status |
+|-------|-------|--------|
+| **P0** Interface Contracts | Shared types, UTM projection, LandCover fusion API | Done |
+| **P1** External Preprocessing | Python/GDAL pipeline: PBF→GeoJSON, DEM tiling, WorldCover | Done |
+| **P2** TiledFileProvider + Spatial Index | Tile manifest parser, grid spatial index, LRU cache | Done |
+| **P3** Tiled DataAsset + Streaming | Per-tile DataAsset generation, async streaming catalog | Done |
+
+See [`PLAN.md`](PLAN.md) for the original collaboration plan.
+
+## Development Workflow
+
+```
+1. Prepare GIS data
+   overpass-turbo → GeoJSON export
+   OpenTopography / SRTM → DEM tiles
+   ESA WorldCover → LandCover GeoTIFF (optional, 10m resolution)
+
+2. Run preprocessing pipeline (for tiled mode)
+   python Tools/GISPreprocess/preprocess.py --input ./RawData --output Content/GISData/Region_01 --tile-size 1024
+
+3. Editor: Generate & Preview
+   Drop AGISWorldBuilder → Set DataSourceType → GenerateInEditor → visual check
+   (or ATiledWorldBuilder for tiled batch generation)
+
+4. Editor: Bake to DataAsset
+   GenerateAndSaveDataAsset → ULandUseMapDataAsset persisted under /Game/GISData/
+   (Tiled mode: TiledWorldBuilder generates per-tile DataAssets automatically)
+
+5. PCG Graph
+   GIS Land Use Sampler node → Attribute Filter → Building/Tree/Road spawners
+   (Enable bEnableTiling + set LoadRadius for tile-aware sampling)
+
+6. Runtime Streaming
+   TiledLandUseMapDataAsset async-loads tile DataAssets on demand
+```
 
 ## Tech Stack
 
@@ -81,7 +156,9 @@ See [`Plugins/GISProcedural/README.md`](Plugins/GISProcedural/README.md) for det
 - **PCG**: UE5 Procedural Content Generation Framework
 - **Data Formats**: GeoJSON, GeoTIFF, PNG Heightmap (Mapbox Terrain RGB), RAW (.r16/.r32), SRTM HGT
 - **Online Services**: ArcGIS REST Feature Services
-- **Language**: C++ (UE5 plugin), no external dependencies beyond UE5
+- **Preprocessing**: Python 3.10+, GDAL/OGR, osmium-tool (Phase 1+)
+- **Projection**: WGS84 ↔ UTM (built-in), Simplified Mercator for local regions
+- **Language**: C++ (UE5 plugin), Python (external preprocessing)
 
 ## License
 
