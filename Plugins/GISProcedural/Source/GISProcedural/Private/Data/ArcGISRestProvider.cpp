@@ -38,6 +38,9 @@ bool UArcGISRestProvider::QuerySingleLayer(
     int32 ResultOffset = 0;
     bool bHasMore = true;
 
+    // 在循环外创建一次 Parser，避免每页都 NewObject 增加 GC 压力
+    UGeoJsonParser* Parser = NewObject<UGeoJsonParser>();
+
     while (bHasMore)
     {
         const FString QueryUrl = BuildQueryUrl(LayerUrl, Bounds, ResultOffset);
@@ -46,15 +49,22 @@ bool UArcGISRestProvider::QuerySingleLayer(
         if (!HttpGetSync(QueryUrl, Response))
         {
             UE_LOG(LogTemp, Error, TEXT("ArcGISRestProvider: HTTP request failed for %s"), *LayerUrl);
-            return ResultOffset > 0; // 至少拿到部分数据算成功
+            if (ResultOffset > 0)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("ArcGISRestProvider: Returning partial data (%d features fetched before failure)"), ResultOffset);
+            }
+            return ResultOffset > 0;
         }
 
         // 解析 GeoJSON 响应
-        UGeoJsonParser* Parser = NewObject<UGeoJsonParser>();
         TArray<FGISFeature> PageFeatures;
         if (!Parser->ParseString(Response, PageFeatures))
         {
             UE_LOG(LogTemp, Error, TEXT("ArcGISRestProvider: Failed to parse GeoJSON response"));
+            if (ResultOffset > 0)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("ArcGISRestProvider: Returning partial data (%d features fetched before parse failure)"), ResultOffset);
+            }
             return ResultOffset > 0;
         }
 
@@ -141,8 +151,9 @@ bool UArcGISRestProvider::HttpGetSync(const FString& Url, FString& OutResponse) 
 
     Request->ProcessRequest();
 
-    // 等待最多 30 秒
-    CompletionEvent->Wait(30000);
+    // 等待最多 30 秒（30000ms）
+    constexpr uint32 HttpTimeoutMs = 30000;
+    CompletionEvent->Wait(HttpTimeoutMs);
     FPlatformProcess::ReturnSynchEventToPool(CompletionEvent);
 
     return bRequestSuccess;

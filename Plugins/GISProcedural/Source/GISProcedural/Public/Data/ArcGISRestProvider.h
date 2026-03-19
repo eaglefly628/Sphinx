@@ -55,13 +55,13 @@ public:
     virtual FString GetProviderName() const override { return TEXT("ArcGISRest"); }
     virtual bool IsAvailable() const override;
 
-    /** 同步查询单个图层（内部使用） */
+private:
+    /** 同步查询单个图层 */
     bool QuerySingleLayer(
         const FString& LayerUrl,
         const FGeoRect& Bounds,
         TArray<FGISFeature>& OutFeatures);
 
-private:
     /** 构建查询 URL */
     FString BuildQueryUrl(const FString& LayerUrl, const FGeoRect& Bounds, int32 ResultOffset) const;
 
