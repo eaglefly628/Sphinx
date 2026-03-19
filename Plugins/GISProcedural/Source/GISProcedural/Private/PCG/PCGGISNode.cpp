@@ -85,6 +85,33 @@ bool FPCGGISLandUseSamplerElement::ExecuteInternal(FPCGContext* Context) const
         return true;
     }
 
+    // 确保空间索引已建立（首次访问时自动构建）
+    if (!DataAsset->HasSpatialIndex() && DataAsset->Polygons.Num() > 100)
+    {
+        DataAsset->BuildSpatialIndex();
+    }
+
+    // 瓦片感知：当启用 tiling 时，只采样当前 PCG 组件周围的 polygon
+    const TArray<FLandUsePolygon>* PolygonsToSample = &DataAsset->Polygons;
+    TArray<FLandUsePolygon> TileFilteredPolygons;
+
+    if (Settings->bEnableTiling && Context->SourceComponent.IsValid())
+    {
+        // 获取当前 PCG 组件的世界 bounds
+        const FBox ComponentBounds = Context->SourceComponent->Bounds.GetBox();
+        const float TileHalfExtent = Settings->TileSizeM * 100.0f * Settings->LoadRadius;
+        const FVector Center = ComponentBounds.GetCenter();
+        const FBox LoadBounds(
+            Center - FVector(TileHalfExtent, TileHalfExtent, HALF_WORLD_MAX),
+            Center + FVector(TileHalfExtent, TileHalfExtent, HALF_WORLD_MAX));
+
+        TileFilteredPolygons = DataAsset->GetPolygonsInWorldBounds(LoadBounds);
+        PolygonsToSample = &TileFilteredPolygons;
+
+        UE_LOG(LogTemp, Verbose, TEXT("PCGGISLandUseSampler: Tiling enabled, sampling %d/%d polygons in load radius"),
+            TileFilteredPolygons.Num(), DataAsset->Polygons.Num());
+    }
+
     // 创建输出
     UPCGPointData* OutputPointData = NewObject<UPCGPointData>();
     TArray<FPCGPoint>& OutputPoints = OutputPointData->GetMutablePoints();
@@ -104,7 +131,7 @@ bool FPCGGISLandUseSamplerElement::ExecuteInternal(FPCGContext* Context) const
     const float JitterCm = Settings->JitterAmount * 100.0f;
     FRandomStream RNG(42);
 
-    for (const FLandUsePolygon& Poly : DataAsset->Polygons)
+    for (const FLandUsePolygon& Poly : *PolygonsToSample)
     {
         // 类型过滤
         if (Settings->FilterTypes.Num() > 0 && !Settings->FilterTypes.Contains(Poly.LandUseType))
@@ -162,8 +189,8 @@ bool FPCGGISLandUseSamplerElement::ExecuteInternal(FPCGContext* Context) const
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("PCGGISLandUseSampler: Generated %d sample points from %d polygons"),
-        OutputPoints.Num(), DataAsset->Polygons.Num());
+    UE_LOG(LogTemp, Log, TEXT("PCGGISLandUseSampler: Generated %d sample points from %d polygons (total in asset: %d)"),
+        OutputPoints.Num(), PolygonsToSample->Num(), DataAsset->Polygons.Num());
 
     // 输出到 PCG Graph
     TArray<FPCGTaggedData>& Outputs = Context->OutputData.TaggedData;

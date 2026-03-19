@@ -83,9 +83,45 @@ IGISDataProvider* AGISWorldBuilder::CreateDataProvider()
 
         case EGISDataSourceType::TiledFile:
         {
-            // TiledFileProvider 将由协作者（小城）在 Phase 2 实现
-            UE_LOG(LogTemp, Warning, TEXT("GISWorldBuilder: TiledFile provider not yet implemented (Phase 2)"));
-            return nullptr;
+            // TiledFileProvider 由协作者（小城）在 Phase 2 实现
+            // 通过反射查找，避免编译时硬依赖尚未创建的类
+            static UClass* TiledFileProviderClass = FindObject<UClass>(
+                ANY_PACKAGE, TEXT("TiledFileProvider"));
+
+            if (!TiledFileProviderClass)
+            {
+                UE_LOG(LogTemp, Warning,
+                    TEXT("GISWorldBuilder: UTiledFileProvider class not found. "
+                         "Ensure the TiledFileProvider module (Phase 2) is compiled."));
+                return nullptr;
+            }
+
+            if (!TiledFileProviderInstance || !TiledFileProviderInstance->IsA(TiledFileProviderClass))
+            {
+                TiledFileProviderInstance = NewObject<UObject>(this, TiledFileProviderClass);
+            }
+
+            // 通过反射设置 ManifestPath 属性
+            if (FProperty* ManifestProp = TiledFileProviderClass->FindPropertyByName(TEXT("ManifestPath")))
+            {
+                const FString FullManifestPath = FPaths::Combine(
+                    FPaths::ProjectContentDir(), TileManifestPath);
+                FStrProperty* StrProp = CastField<FStrProperty>(ManifestProp);
+                if (StrProp)
+                {
+                    StrProp->SetPropertyValue_InContainer(TiledFileProviderInstance, FullManifestPath);
+                }
+            }
+
+            // UTiledFileProvider 应实现 IGISDataProvider
+            IGISDataProvider* Provider = Cast<IGISDataProvider>(TiledFileProviderInstance);
+            if (!Provider)
+            {
+                UE_LOG(LogTemp, Error,
+                    TEXT("GISWorldBuilder: UTiledFileProvider does not implement IGISDataProvider"));
+                return nullptr;
+            }
+            return Provider;
         }
 
         case EGISDataSourceType::DataAsset:
@@ -400,6 +436,13 @@ void AGISWorldBuilder::GenerateAndSaveDataAsset()
     {
         DataAsset->SourceProvider = FString::Printf(TEXT("ArcGIS: %s"), *FeatureServiceUrl);
     }
+    else if (DataSourceType == EGISDataSourceType::TiledFile)
+    {
+        DataAsset->SourceProvider = FString::Printf(TEXT("TiledFile: %s"), *TileManifestPath);
+    }
+
+    // 自动构建空间索引以加速运行时查询
+    DataAsset->BuildSpatialIndex();
 
     // 保存
     FAssetRegistryModule::AssetCreated(DataAsset);

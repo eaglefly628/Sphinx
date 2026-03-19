@@ -13,6 +13,7 @@ class UGISPolygonComponent;
 class ULandUseMapDataAsset;
 class ULocalFileProvider;
 class UArcGISRestProvider;
+class UTiledFileProvider;
 
 /** 数据源类型 */
 UENUM(BlueprintType)
@@ -210,6 +211,10 @@ private:
 
     UPROPERTY()
     UArcGISRestProvider* ArcGISRestProviderInstance = nullptr;
+
+    /** TiledFile 数据源实例（Phase 2，由小城实现 UTiledFileProvider） */
+    UPROPERTY()
+    TObjectPtr<UObject> TiledFileProviderInstance = nullptr;
 
     /** 已生成的子 Actor */
     UPROPERTY()
