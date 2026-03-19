@@ -141,18 +141,25 @@ void ULandUseMapDataAsset::LoadTileAsync(const FString& TileID)
 
     // 异步流式加载
     FSoftObjectPath AssetPath = SoftPtr->ToSoftObjectPath();
+    TWeakObjectPtr<ULandUseMapDataAsset> WeakThis(this);
     StreamableManager.RequestAsyncLoad(
         AssetPath,
-        FStreamableDelegate::CreateLambda([this, TileID, AssetPath]()
+        FStreamableDelegate::CreateLambda([WeakThis, TileID, AssetPath]()
         {
+            ULandUseMapDataAsset* Self = WeakThis.Get();
+            if (!Self)
+            {
+                return;
+            }
+
             UObject* Loaded = AssetPath.ResolveObject();
             ULandUseMapDataAsset* TileAsset = Cast<ULandUseMapDataAsset>(Loaded);
             if (TileAsset)
             {
-                LoadedTileCache.Add(TileID, TileAsset);
+                Self->LoadedTileCache.Add(TileID, TileAsset);
                 UE_LOG(LogTemp, Log, TEXT("LandUseMapDataAsset: Async loaded tile '%s' (%d polygons)"),
                     *TileID, TileAsset->Polygons.Num());
-                OnTileLoaded.Broadcast(TileID);
+                Self->OnTileLoaded.Broadcast(TileID);
             }
             else
             {

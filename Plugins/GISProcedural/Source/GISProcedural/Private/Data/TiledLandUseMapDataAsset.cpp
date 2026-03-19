@@ -46,18 +46,26 @@ void UTiledLandUseMapDataAsset::LoadTileAsync(const FString& TileID)
     }
 
     FSoftObjectPath AssetPath = SoftPtr->ToSoftObjectPath();
+    TWeakObjectPtr<UTiledLandUseMapDataAsset> WeakThis(this);
     StreamableManager.RequestAsyncLoad(
         AssetPath,
-        FStreamableDelegate::CreateLambda([this, TileID, AssetPath]()
+        FStreamableDelegate::CreateLambda([WeakThis, TileID, AssetPath]()
         {
+            UTiledLandUseMapDataAsset* Self = WeakThis.Get();
+            if (!Self)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("TiledLandUseMapDataAsset: Owner GC'd before async load completed for '%s'"), *TileID);
+                return;
+            }
+
             UObject* Loaded = AssetPath.ResolveObject();
             ULandUseMapDataAsset* Asset = Cast<ULandUseMapDataAsset>(Loaded);
             if (Asset)
             {
-                LoadedTileCache.Add(TileID, Asset);
+                Self->LoadedTileCache.Add(TileID, Asset);
                 UE_LOG(LogTemp, Log, TEXT("TiledLandUseMapDataAsset: Async loaded tile '%s' (%d polygons)"),
                     *TileID, Asset->Polygons.Num());
-                OnTileAssetLoaded.Broadcast(TileID, Asset);
+                Self->OnTileAssetLoaded.Broadcast(TileID, Asset);
             }
             else
             {

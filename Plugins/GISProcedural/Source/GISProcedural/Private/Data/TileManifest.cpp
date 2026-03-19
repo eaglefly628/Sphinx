@@ -29,8 +29,7 @@ bool FTileManifest::ParseFromJson(const FString& JsonString, FTileManifest& OutM
     }
 
     // 投影信息
-    FString Projection;
-    RootObject->TryGetStringField(TEXT("projection"), Projection);
+    FString Projection = RootObject->GetStringField(TEXT("projection"));
 
     OutManifest.UTMZone = 0;
     OutManifest.bNorthernHemisphere = true;
@@ -90,9 +89,9 @@ bool FTileManifest::ParseFromJson(const FString& JsonString, FTileManifest& OutM
         Entry.Col = TileObj->GetIntegerField(TEXT("x"));
         Entry.Row = TileObj->GetIntegerField(TEXT("y"));
 
-        TileObj->TryGetStringField(TEXT("geojson"), Entry.GeoJsonRelPath);
-        TileObj->TryGetStringField(TEXT("dem"), Entry.DEMRelPath);
-        TileObj->TryGetStringField(TEXT("landcover"), Entry.LandCoverRelPath);
+        Entry.GeoJsonRelPath = TileObj->HasField(TEXT("geojson")) ? TileObj->GetStringField(TEXT("geojson")) : TEXT("");
+        Entry.DEMRelPath = TileObj->HasField(TEXT("dem")) ? TileObj->GetStringField(TEXT("dem")) : TEXT("");
+        Entry.LandCoverRelPath = TileObj->HasField(TEXT("landcover")) ? TileObj->GetStringField(TEXT("landcover")) : TEXT("");
 
         Entry.FeatureCount = TileObj->HasField(TEXT("polygon_count"))
             ? static_cast<int32>(TileObj->GetNumberField(TEXT("polygon_count")))
