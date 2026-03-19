@@ -1,6 +1,7 @@
 // PolygonDeriver.cpp - Polygon 推导实现
 // 支持两种模式：DataProvider 模式 和 传统文件路径模式
 #include "Polygon/PolygonDeriver.h"
+#include "GISProceduralModule.h"
 #include "Polygon/LandUseClassifier.h"
 #include "Data/GeoJsonParser.h"
 #include "Data/GISCoordinate.h"
@@ -15,31 +16,34 @@ TArray<FLandUsePolygon> UPolygonDeriver::GenerateFromProvider(
     double OriginLat)
 {
     TArray<FLandUsePolygon> Result;
+    const double StartTime = FPlatformTime::Seconds();
 
     if (!DataProvider)
     {
-        UE_LOG(LogTemp, Error, TEXT("PolygonDeriver: No DataProvider set"));
+        UE_LOG(LogGIS, Error, TEXT("PolygonDeriver: No DataProvider set"));
         return Result;
     }
 
     if (!DataProvider->IsAvailable())
     {
-        UE_LOG(LogTemp, Error, TEXT("PolygonDeriver: DataProvider '%s' is not available"),
+        UE_LOG(LogGIS, Error, TEXT("PolygonDeriver: DataProvider '%s' is not available"),
             *DataProvider->GetProviderName());
         return Result;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("PolygonDeriver: Using DataProvider '%s'"),
+    UE_LOG(LogGIS, Log, TEXT("PolygonDeriver: ===== GenerateFromProvider START (provider='%s') ====="),
         *DataProvider->GetProviderName());
 
     // Step 1: 从 DataProvider 查询矢量数据
+    UE_LOG(LogGIS, Verbose, TEXT("PolygonDeriver: Step 1/4 → Loading vector data..."));
     if (!LoadVectorDataFromProvider(QueryBounds))
     {
-        UE_LOG(LogTemp, Warning, TEXT("PolygonDeriver: No vector data from provider"));
+        UE_LOG(LogGIS, Warning, TEXT("PolygonDeriver: No vector data from provider"));
         return Result;
     }
 
     // Step 2: 尝试从 DataProvider 获取高程数据做地形分区
+    UE_LOG(LogGIS, Verbose, TEXT("PolygonDeriver: Step 2/4 → Querying elevation data..."));
     bool bHasTerrain = false;
     FGeoRect EffectiveBounds = QueryBounds.IsValid() ? QueryBounds : InferBoundsFromFeatures();
 
@@ -72,11 +76,13 @@ TArray<FLandUsePolygon> UPolygonDeriver::GenerateFromProvider(
             );
 
             bHasTerrain = TerrainZones.Num() > 0;
-            UE_LOG(LogTemp, Log, TEXT("PolygonDeriver: Terrain analysis produced %d zones"), TerrainZones.Num());
+            UE_LOG(LogGIS, Log, TEXT("PolygonDeriver: Terrain analysis produced %d zones"), TerrainZones.Num());
         }
     }
 
     // Step 3: 生成 Polygon
+    UE_LOG(LogGIS, Verbose, TEXT("PolygonDeriver: Step 3/4 → Generating polygons (terrain=%s)..."),
+        bHasTerrain ? TEXT("yes") : TEXT("no"));
     if (bHasTerrain)
     {
         // 有地形分区 → 矢量切割
@@ -89,10 +95,12 @@ TArray<FLandUsePolygon> UPolygonDeriver::GenerateFromProvider(
     }
 
     // Step 4: 分类 + PCG 参数
+    UE_LOG(LogGIS, Verbose, TEXT("PolygonDeriver: Step 4/4 → Classifying %d polygons + assigning PCG params..."), Result.Num());
     ClassifyPolygons(Result);
     AssignPCGParams(Result);
 
-    UE_LOG(LogTemp, Log, TEXT("PolygonDeriver: Generated %d polygons via DataProvider"), Result.Num());
+    UE_LOG(LogGIS, Log, TEXT("PolygonDeriver: ===== GenerateFromProvider END → %d polygons (%.3fs) ====="),
+        Result.Num(), FPlatformTime::Seconds() - StartTime);
     return Result;
 }
 
@@ -211,7 +219,7 @@ TArray<FLandUsePolygon> UPolygonDeriver::GenerateFromVectorsOnly(double OriginLo
 
     MarkWaterBodies(Result);
 
-    UE_LOG(LogTemp, Log, TEXT("PolygonDeriver: Generated %d polygons from vectors only"), Result.Num());
+    UE_LOG(LogGIS, Log, TEXT("PolygonDeriver: Generated %d polygons from vectors only"), Result.Num());
     return Result;
 }
 
@@ -222,7 +230,7 @@ void UPolygonDeriver::CategorizeFeatures()
     CoastlineFeatures = UGeoJsonParser::FilterByCategory(AllFeatures, EGISFeatureCategory::Coastline);
     WaterBodyFeatures = UGeoJsonParser::FilterByCategory(AllFeatures, EGISFeatureCategory::WaterBody);
 
-    UE_LOG(LogTemp, Log, TEXT("PolygonDeriver: Categorized - Roads: %d, Rivers: %d, Coastlines: %d, WaterBodies: %d"),
+    UE_LOG(LogGIS, Log, TEXT("PolygonDeriver: Categorized - Roads: %d, Rivers: %d, Coastlines: %d, WaterBodies: %d"),
         RoadFeatures.Num(), RiverFeatures.Num(), CoastlineFeatures.Num(), WaterBodyFeatures.Num());
 }
 
@@ -271,7 +279,7 @@ TArray<FLandUsePolygon> UPolygonDeriver::GeneratePolygons(
     // Step 1: 加载 DEM
     if (!LoadDEM(DEMPath))
     {
-        UE_LOG(LogTemp, Error, TEXT("PolygonDeriver: Failed to load DEM from %s"), *DEMPath);
+        UE_LOG(LogGIS, Error, TEXT("PolygonDeriver: Failed to load DEM from %s"), *DEMPath);
         return Result;
     }
 
@@ -279,20 +287,20 @@ TArray<FLandUsePolygon> UPolygonDeriver::GeneratePolygons(
     double MinLon, MinLat, MaxLon, MaxLat;
     if (!InferAnalysisBounds(MinLon, MinLat, MaxLon, MaxLat))
     {
-        UE_LOG(LogTemp, Error, TEXT("PolygonDeriver: Failed to infer analysis bounds from DEM"));
+        UE_LOG(LogGIS, Error, TEXT("PolygonDeriver: Failed to infer analysis bounds from DEM"));
         return Result;
     }
 
     if (!AnalyzeTerrain(MinLon, MinLat, MaxLon, MaxLat, OriginLon, OriginLat))
     {
-        UE_LOG(LogTemp, Error, TEXT("PolygonDeriver: Terrain analysis failed"));
+        UE_LOG(LogGIS, Error, TEXT("PolygonDeriver: Terrain analysis failed"));
         return Result;
     }
 
     // Step 3: 加载矢量数据
     if (!LoadVectorData(GeoJsonPath))
     {
-        UE_LOG(LogTemp, Warning, TEXT("PolygonDeriver: No vector data loaded, using terrain zones only"));
+        UE_LOG(LogGIS, Warning, TEXT("PolygonDeriver: No vector data loaded, using terrain zones only"));
     }
 
     // Step 4: 矢量切割
@@ -304,7 +312,7 @@ TArray<FLandUsePolygon> UPolygonDeriver::GeneratePolygons(
     // Step 6: PCG 参数
     AssignPCGParams(Result);
 
-    UE_LOG(LogTemp, Log, TEXT("PolygonDeriver: Generated %d polygons"), Result.Num());
+    UE_LOG(LogGIS, Log, TEXT("PolygonDeriver: Generated %d polygons"), Result.Num());
     return Result;
 }
 
@@ -382,7 +390,7 @@ bool UPolygonDeriver::AnalyzeTerrain(
         OriginLon, OriginLat
     );
 
-    UE_LOG(LogTemp, Log, TEXT("PolygonDeriver: Terrain analysis produced %d zones"), TerrainZones.Num());
+    UE_LOG(LogGIS, Log, TEXT("PolygonDeriver: Terrain analysis produced %d zones"), TerrainZones.Num());
     return TerrainZones.Num() > 0;
 }
 
@@ -430,7 +438,7 @@ TArray<FLandUsePolygon> UPolygonDeriver::CutZonesWithVectors(double OriginLon, d
     AddFeaturesToCutLines(RiverFeatures);
     AddFeaturesToCutLines(CoastlineFeatures);
 
-    UE_LOG(LogTemp, Log, TEXT("PolygonDeriver: %d cut lines collected"), CutLines.Num());
+    UE_LOG(LogGIS, Log, TEXT("PolygonDeriver: %d cut lines collected"), CutLines.Num());
 
     // 对每个地形分区执行切割
     for (const FTerrainZone& Zone : TerrainZones)
@@ -500,7 +508,7 @@ TArray<FLandUsePolygon> UPolygonDeriver::CutZonesWithVectors(double OriginLon, d
 
     MarkWaterBodies(Result);
 
-    UE_LOG(LogTemp, Log, TEXT("PolygonDeriver: Cut zones into %d polygons"), Result.Num());
+    UE_LOG(LogGIS, Log, TEXT("PolygonDeriver: Cut zones into %d polygons"), Result.Num());
     return Result;
 }
 

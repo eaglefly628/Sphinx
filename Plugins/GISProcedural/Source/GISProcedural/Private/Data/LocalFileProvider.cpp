@@ -1,5 +1,6 @@
 // LocalFileProvider.cpp
 #include "Data/LocalFileProvider.h"
+#include "GISProceduralModule.h"
 #include "Data/GeoJsonParser.h"
 #include "DEM/DEMParser.h"
 
@@ -10,23 +11,25 @@ bool ULocalFileProvider::QueryFeatures(const FGeoRect& Bounds, TArray<FGISFeatur
     {
         if (GeoJsonFilePath.IsEmpty())
         {
-            UE_LOG(LogTemp, Error, TEXT("LocalFileProvider: GeoJsonFilePath is empty"));
+            UE_LOG(LogGIS, Error, TEXT("LocalFileProvider: GeoJsonFilePath is empty"));
             return false;
         }
 
         UGeoJsonParser* Parser = NewObject<UGeoJsonParser>();
         if (!Parser->ParseFile(GeoJsonFilePath, CachedFeatures))
         {
-            UE_LOG(LogTemp, Error, TEXT("LocalFileProvider: Failed to parse %s"), *GeoJsonFilePath);
+            UE_LOG(LogGIS, Error, TEXT("LocalFileProvider: Failed to parse %s"), *GeoJsonFilePath);
             return false;
         }
 
         bFeaturesCached = true;
-        UE_LOG(LogTemp, Log, TEXT("LocalFileProvider: Cached %d features from %s"),
+        UE_LOG(LogGIS, Log, TEXT("LocalFileProvider: Cached %d features from %s"),
             CachedFeatures.Num(), *GeoJsonFilePath);
     }
 
     // 如果有有效范围，做空间过滤
+    UE_LOG(LogGIS, Verbose, TEXT("LocalFileProvider: QueryFeatures (bounds valid=%s, cached=%d features)"),
+        Bounds.IsValid() ? TEXT("yes") : TEXT("no"), CachedFeatures.Num());
     if (Bounds.IsValid())
     {
         for (const FGISFeature& Feature : CachedFeatures)

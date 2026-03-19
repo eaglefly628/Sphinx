@@ -1,5 +1,6 @@
 // RasterLandCoverParser.cpp - ESA WorldCover JSON 栅格解析实现
 #include "Data/RasterLandCoverParser.h"
+#include "GISProceduralModule.h"
 #include "Misc/FileHelper.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -9,7 +10,7 @@ bool URasterLandCoverParser::ParseFile(const FString& FilePath, FLandCoverGrid& 
     FString JsonString;
     if (!FFileHelper::LoadFileToString(JsonString, *FilePath))
     {
-        UE_LOG(LogTemp, Error, TEXT("RasterLandCoverParser: Failed to load: %s"), *FilePath);
+        UE_LOG(LogGIS, Error, TEXT("RasterLandCoverParser: Failed to load: %s"), *FilePath);
         return false;
     }
 
@@ -23,7 +24,7 @@ bool URasterLandCoverParser::ParseString(const FString& JsonString, FLandCoverGr
 
     if (!FJsonSerializer::Deserialize(Reader, RootObject) || !RootObject.IsValid())
     {
-        UE_LOG(LogTemp, Error, TEXT("RasterLandCoverParser: Failed to parse JSON"));
+        UE_LOG(LogGIS, Error, TEXT("RasterLandCoverParser: Failed to parse JSON"));
         return false;
     }
 
@@ -34,14 +35,14 @@ bool URasterLandCoverParser::ParseString(const FString& JsonString, FLandCoverGr
     const TArray<TSharedPtr<FJsonValue>>* ClassesArray = nullptr;
     if (!RootObject->TryGetArrayField(TEXT("classes"), ClassesArray))
     {
-        UE_LOG(LogTemp, Error, TEXT("RasterLandCoverParser: No 'classes' array in JSON"));
+        UE_LOG(LogGIS, Error, TEXT("RasterLandCoverParser: No 'classes' array in JSON"));
         return false;
     }
 
     const int32 ExpectedSize = OutGrid.Width * OutGrid.Height;
     if (ClassesArray->Num() != ExpectedSize)
     {
-        UE_LOG(LogTemp, Warning,
+        UE_LOG(LogGIS, Warning,
             TEXT("RasterLandCoverParser: classes array size %d != expected %d (width*height)"),
             ClassesArray->Num(), ExpectedSize);
     }
@@ -52,7 +53,7 @@ bool URasterLandCoverParser::ParseString(const FString& JsonString, FLandCoverGr
         OutGrid.ClassGrid.Add(static_cast<uint8>(Val->AsNumber()));
     }
 
-    UE_LOG(LogTemp, Log, TEXT("RasterLandCoverParser: Parsed %dx%d grid (%.1fm resolution, %d cells)"),
+    UE_LOG(LogGIS, Log, TEXT("RasterLandCoverParser: Parsed %dx%d grid (%.1fm resolution, %d cells)"),
         OutGrid.Width, OutGrid.Height, OutGrid.ResolutionM, OutGrid.ClassGrid.Num());
 
     return OutGrid.IsValid();

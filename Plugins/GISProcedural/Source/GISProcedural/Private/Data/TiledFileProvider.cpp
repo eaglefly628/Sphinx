@@ -1,5 +1,6 @@
 // TiledFileProvider.cpp - 瓦片化数据提供者实现
 #include "Data/TiledFileProvider.h"
+#include "GISProceduralModule.h"
 #include "Data/GeoJsonParser.h"
 #include "Misc/FileHelper.h"
 #include "Serialization/JsonReader.h"
@@ -7,20 +8,24 @@
 
 bool UTiledFileProvider::Initialize()
 {
+    UE_LOG(LogGIS, Log, TEXT("TiledFileProvider: ===== Initialize START ====="));
+    const double StartTime = FPlatformTime::Seconds();
+
     bInitialized = false;
     TileGrid.Empty();
     FeatureCache.Empty();
 
     if (ManifestPath.IsEmpty())
     {
-        UE_LOG(LogTemp, Error, TEXT("TiledFileProvider: ManifestPath is empty"));
+        UE_LOG(LogGIS, Error, TEXT("TiledFileProvider: ManifestPath is empty"));
         return false;
     }
 
     // 解析 manifest
+    UE_LOG(LogGIS, Log, TEXT("TiledFileProvider: Loading manifest → %s"), *ManifestPath);
     if (!FTileManifest::LoadFromFile(ManifestPath, Manifest))
     {
-        UE_LOG(LogTemp, Error, TEXT("TiledFileProvider: Failed to load manifest: %s"), *ManifestPath);
+        UE_LOG(LogGIS, Error, TEXT("TiledFileProvider: Failed to load manifest: %s"), *ManifestPath);
         return false;
     }
 
@@ -42,15 +47,19 @@ bool UTiledFileProvider::Initialize()
 
     bInitialized = true;
 
-    UE_LOG(LogTemp, Log, TEXT("TiledFileProvider: Initialized with %d tiles, base=%s"),
-        Manifest.Tiles.Num(), *BaseDirectory);
+    UE_LOG(LogGIS, Log, TEXT("TiledFileProvider: Initialized with %d tiles, grid=%dx%d, base=%s (%.3fs)"),
+        Manifest.Tiles.Num(), Manifest.NumCols, Manifest.NumRows,
+        *BaseDirectory, FPlatformTime::Seconds() - StartTime);
+    UE_LOG(LogGIS, Log, TEXT("TiledFileProvider: ===== Initialize END ====="));
 
     return true;
 }
 
 void UTiledFileProvider::ClearCache()
 {
+    const int32 CacheSize = FeatureCache.Num();
     FeatureCache.Empty();
+    UE_LOG(LogGIS, Log, TEXT("TiledFileProvider: Cache cleared (%d entries removed)"), CacheSize);
 }
 
 bool UTiledFileProvider::QueryFeatures(
@@ -59,7 +68,7 @@ bool UTiledFileProvider::QueryFeatures(
 {
     if (!bInitialized)
     {
-        UE_LOG(LogTemp, Warning, TEXT("TiledFileProvider: Not initialized"));
+        UE_LOG(LogGIS, Warning, TEXT("TiledFileProvider: Not initialized"));
         return false;
     }
 
@@ -68,13 +77,16 @@ bool UTiledFileProvider::QueryFeatures(
 
     if (MatchingTiles.Num() == 0)
     {
-        UE_LOG(LogTemp, Verbose, TEXT("TiledFileProvider: No tiles match bounds (%.4f,%.4f)-(%.4f,%.4f)"),
+        UE_LOG(LogGIS, Verbose, TEXT("TiledFileProvider: No tiles match bounds (%.4f,%.4f)-(%.4f,%.4f)"),
             Bounds.MinLon, Bounds.MinLat, Bounds.MaxLon, Bounds.MaxLat);
         return true;  // 成功但无数据
     }
 
+    UE_LOG(LogGIS, Verbose, TEXT("TiledFileProvider: QueryFeatures → %d tiles match bounds"), MatchingTiles.Num());
+
     // 全局 feature ID 去重集合（跨 tile 边界的要素可能出现在多个 tile 中）
     TSet<int32> SeenFeatureIDs;
+    int32 DedupCount = 0;
 
     for (const FTileEntry* TilePtr : MatchingTiles)
     {
@@ -93,6 +105,7 @@ bool UTiledFileProvider::QueryFeatures(
                 int32 FeatureID = FCString::Atoi(**FeatureIDStr);
                 if (SeenFeatureIDs.Contains(FeatureID))
                 {
+                    DedupCount++;
                     continue;  // 已处理过的跨 tile 要素
                 }
                 SeenFeatureIDs.Add(FeatureID);
@@ -125,8 +138,8 @@ bool UTiledFileProvider::QueryFeatures(
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("TiledFileProvider: QueryFeatures returned %d features from %d tiles"),
-        OutFeatures.Num(), MatchingTiles.Num());
+    UE_LOG(LogGIS, Log, TEXT("TiledFileProvider: QueryFeatures → %d features from %d tiles (deduped %d cross-tile)"),
+        OutFeatures.Num(), MatchingTiles.Num(), DedupCount);
 
     return true;
 }
@@ -153,7 +166,7 @@ bool UTiledFileProvider::QueryElevation(
 
     // 对于单 tile 查询，直接返回该 tile 的 DEM 路径标识
     // 多 tile 合并需要在调用方处理
-    UE_LOG(LogTemp, Verbose,
+    UE_LOG(LogGIS, Verbose,
         TEXT("TiledFileProvider: QueryElevation found %d tiles with DEM data"),
         MatchingTiles.Num());
 
@@ -184,10 +197,12 @@ bool UTiledFileProvider::QueryLandCover(
     if (MatchingTiles.Num() == 1 && !MatchingTiles[0]->LandCoverRelPath.IsEmpty())
     {
         const FString LCPath = FPaths::Combine(BaseDirectory, MatchingTiles[0]->LandCoverRelPath);
+        UE_LOG(LogGIS, Verbose, TEXT("TiledFileProvider: Loading LandCover from %s"), *LCPath);
 
         FString JsonString;
         if (!FFileHelper::LoadFileToString(JsonString, *LCPath))
         {
+            UE_LOG(LogGIS, Warning, TEXT("TiledFileProvider: Failed to read LandCover file: %s"), *LCPath);
             return false;
         }
 
@@ -195,6 +210,7 @@ bool UTiledFileProvider::QueryLandCover(
         TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
         if (!FJsonSerializer::Deserialize(Reader, LCObj) || !LCObj.IsValid())
         {
+            UE_LOG(LogGIS, Warning, TEXT("TiledFileProvider: Failed to parse LandCover JSON: %s"), *LCPath);
             return false;
         }
 
@@ -213,12 +229,14 @@ bool UTiledFileProvider::QueryLandCover(
             OutClassGrid.Add(static_cast<uint8>(Val->AsNumber()));
         }
 
+        UE_LOG(LogGIS, Log, TEXT("TiledFileProvider: QueryLandCover → %dx%d grid from tile (%d,%d)"),
+            OutWidth, OutHeight, MatchingTiles[0]->Col, MatchingTiles[0]->Row);
         return true;
     }
 
     // 多 tile 合并的 LandCover 需要空间拼接
     // TODO: 实现多 tile LandCover 合并
-    UE_LOG(LogTemp, Verbose,
+    UE_LOG(LogGIS, Verbose,
         TEXT("TiledFileProvider: Multi-tile LandCover merge not yet implemented (%d tiles)"),
         MatchingTiles.Num());
 
@@ -233,16 +251,22 @@ const TArray<FGISFeature>* UTiledFileProvider::LoadTileFeatures(const FTileEntry
     if (FCachedTileData* Cached = FeatureCache.Find(Coord))
     {
         Cached->LastAccessFrame = GFrameCounter;
+        UE_LOG(LogGIS, Verbose, TEXT("TiledFileProvider: Cache HIT tile (%d,%d) → %d features"),
+            Entry.Col, Entry.Row, Cached->Features.Num());
         return &Cached->Features;
     }
 
     // 缓存未命中 → 加载
     if (Entry.GeoJsonRelPath.IsEmpty())
     {
+        UE_LOG(LogGIS, Verbose, TEXT("TiledFileProvider: Tile (%d,%d) has no GeoJSON path, skipping"),
+            Entry.Col, Entry.Row);
         return nullptr;
     }
 
     const FString FullPath = FPaths::Combine(BaseDirectory, Entry.GeoJsonRelPath);
+    UE_LOG(LogGIS, Verbose, TEXT("TiledFileProvider: Cache MISS tile (%d,%d), loading %s"),
+        Entry.Col, Entry.Row, *FullPath);
 
     if (!Parser)
     {
@@ -254,7 +278,7 @@ const TArray<FGISFeature>* UTiledFileProvider::LoadTileFeatures(const FTileEntry
 
     if (!Parser->ParseFile(FullPath, NewData.Features))
     {
-        UE_LOG(LogTemp, Warning, TEXT("TiledFileProvider: Failed to parse tile (%d,%d): %s"),
+        UE_LOG(LogGIS, Warning, TEXT("TiledFileProvider: Failed to parse tile (%d,%d): %s"),
             Entry.Col, Entry.Row, *FullPath);
         return nullptr;
     }
@@ -267,7 +291,7 @@ const TArray<FGISFeature>* UTiledFileProvider::LoadTileFeatures(const FTileEntry
 
     FCachedTileData& Stored = FeatureCache.Add(Coord, MoveTemp(NewData));
 
-    UE_LOG(LogTemp, Verbose, TEXT("TiledFileProvider: Loaded tile (%d,%d) with %d features, cache=%d/%d"),
+    UE_LOG(LogGIS, Log, TEXT("TiledFileProvider: Loaded tile (%d,%d) → %d features, cache=%d/%d"),
         Entry.Col, Entry.Row, Stored.Features.Num(), FeatureCache.Num(), MaxCachedTiles);
 
     return &Stored.Features;
@@ -289,5 +313,7 @@ void UTiledFileProvider::EvictOldestCache()
         }
     }
 
+    UE_LOG(LogGIS, Verbose, TEXT("TiledFileProvider: LRU evict tile (%d,%d), frame=%llu"),
+        OldestKey.X, OldestKey.Y, OldestFrame);
     FeatureCache.Remove(OldestKey);
 }

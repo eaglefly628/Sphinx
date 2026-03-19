@@ -1,5 +1,6 @@
 // GISWorldBuilder.cpp - 世界构建器实现
 #include "Runtime/GISWorldBuilder.h"
+#include "GISProceduralModule.h"
 #include "Components/GISPolygonComponent.h"
 #include "Data/LocalFileProvider.h"
 #include "Data/ArcGISRestProvider.h"
@@ -34,6 +35,7 @@ void AGISWorldBuilder::BeginPlay()
 
     if (bAutoGenerateOnPlay)
     {
+        UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: BeginPlay → auto-generate triggered"));
         GenerateAll();
     }
 }
@@ -50,10 +52,15 @@ void AGISWorldBuilder::InitDeriver()
     PolygonDeriver->RoadClassWeights = RoadClassWeights;
     PolygonDeriver->DEMFormat = DEMFormat;
     PolygonDeriver->TerrainAnalysisResolution = TerrainAnalysisResolution;
+
+    UE_LOG(LogGIS, Verbose, TEXT("GISWorldBuilder: InitDeriver complete (MinArea=%.1f, Resolution=%.1f)"),
+        MinPolygonArea, TerrainAnalysisResolution);
 }
 
 IGISDataProvider* AGISWorldBuilder::CreateDataProvider()
 {
+    UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: CreateDataProvider → mode=%d"), static_cast<int32>(DataSourceType));
+
     switch (DataSourceType)
     {
         case EGISDataSourceType::LocalFile:
@@ -67,6 +74,7 @@ IGISDataProvider* AGISWorldBuilder::CreateDataProvider()
             LocalFileProviderInstance->DEMPath =
                 FPaths::Combine(FPaths::ProjectContentDir(), DEMPath);
             LocalFileProviderInstance->DEMFormat = DEMFormat;
+            UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: LocalFile provider → GeoJSON=%s"), *GeoJsonPath);
             return LocalFileProviderInstance;
         }
 
@@ -79,6 +87,7 @@ IGISDataProvider* AGISWorldBuilder::CreateDataProvider()
             ArcGISRestProviderInstance->FeatureServiceUrl = FeatureServiceUrl;
             ArcGISRestProviderInstance->ApiKey = ArcGISApiKey;
             ArcGISRestProviderInstance->AdditionalLayerUrls = AdditionalLayerUrls;
+            UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: ArcGIS provider → URL=%s"), *FeatureServiceUrl);
             return ArcGISRestProviderInstance;
         }
 
@@ -95,9 +104,10 @@ IGISDataProvider* AGISWorldBuilder::CreateDataProvider()
 
             if (!TiledProvider->IsInitialized())
             {
+                UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: Initializing TiledFileProvider → manifest=%s"), *TileManifestPath);
                 if (!TiledProvider->Initialize())
                 {
-                    UE_LOG(LogTemp, Error,
+                    UE_LOG(LogGIS, Error,
                         TEXT("GISWorldBuilder: Failed to initialize TiledFileProvider"));
                     return nullptr;
                 }
@@ -114,6 +124,9 @@ IGISDataProvider* AGISWorldBuilder::CreateDataProvider()
 
 void AGISWorldBuilder::GenerateAll()
 {
+    UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: ===== GenerateAll START (mode=%d) ====="), static_cast<int32>(DataSourceType));
+    const double StartTime = FPlatformTime::Seconds();
+
     ClearGenerated();
 
     // DataAsset 模式：直接加载
@@ -121,6 +134,8 @@ void AGISWorldBuilder::GenerateAll()
     {
         LoadFromDataAsset();
         PostGenerate();
+        UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: ===== GenerateAll END (DataAsset, %.3fs) ====="),
+            FPlatformTime::Seconds() - StartTime);
         return;
     }
 
@@ -133,7 +148,8 @@ void AGISWorldBuilder::GenerateAll()
         PolygonDeriver->SetDataProvider(Provider);
         PolygonDeriver->SetQueryBounds(QueryBounds);
 
-        UE_LOG(LogTemp, Log, TEXT("GISWorldBuilder: Using DataProvider '%s'"), *Provider->GetProviderName());
+        UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: Using DataProvider '%s', starting polygon generation..."),
+            *Provider->GetProviderName());
         GeneratedPolygons = PolygonDeriver->GenerateFromProvider(OriginLongitude, OriginLatitude);
     }
     else
@@ -142,7 +158,7 @@ void AGISWorldBuilder::GenerateAll()
         const FString FullDEMPath = FPaths::Combine(FPaths::ProjectContentDir(), DEMPath);
         const FString FullGeoJsonPath = FPaths::Combine(FPaths::ProjectContentDir(), GeoJsonPath);
 
-        UE_LOG(LogTemp, Log, TEXT("GISWorldBuilder: Fallback to legacy mode DEM=%s, GeoJSON=%s"),
+        UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: Fallback to legacy mode DEM=%s, GeoJSON=%s"),
             *FullDEMPath, *FullGeoJsonPath);
 
         GeneratedPolygons = PolygonDeriver->GeneratePolygons(
@@ -152,10 +168,13 @@ void AGISWorldBuilder::GenerateAll()
     }
 
     PostGenerate();
+    UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: ===== GenerateAll END (%d polygons, %.3fs) ====="),
+        GeneratedPolygons.Num(), FPlatformTime::Seconds() - StartTime);
 }
 
 void AGISWorldBuilder::GenerateAllAsync()
 {
+    UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: GenerateAllAsync START"));
     ClearGenerated();
 
     // 异步仅支持传统模式
@@ -177,6 +196,7 @@ void AGISWorldBuilder::GenerateAllAsync()
 void AGISWorldBuilder::OnPolygonsGenerated(const TArray<FLandUsePolygon>& Polygons)
 {
     GeneratedPolygons = Polygons;
+    UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: Async generation complete → %d polygons"), Polygons.Num());
     PostGenerate();
 }
 
@@ -184,17 +204,18 @@ void AGISWorldBuilder::LoadFromDataAsset()
 {
     if (!LandUseDataAsset)
     {
-        UE_LOG(LogTemp, Error, TEXT("GISWorldBuilder: No DataAsset assigned"));
+        UE_LOG(LogGIS, Error, TEXT("GISWorldBuilder: No DataAsset assigned"));
         return;
     }
 
     GeneratedPolygons = LandUseDataAsset->Polygons;
-    UE_LOG(LogTemp, Log, TEXT("GISWorldBuilder: Loaded %d polygons from DataAsset"), GeneratedPolygons.Num());
+    UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: Loaded %d polygons from DataAsset '%s'"),
+        GeneratedPolygons.Num(), *LandUseDataAsset->GetName());
 }
 
 void AGISWorldBuilder::PostGenerate()
 {
-    UE_LOG(LogTemp, Log, TEXT("GISWorldBuilder: %d polygons ready"), GeneratedPolygons.Num());
+    UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: PostGenerate → %d polygons ready"), GeneratedPolygons.Num());
 
     if (bSpawnPerPolygonActors)
     {
@@ -211,6 +232,7 @@ void AGISWorldBuilder::PostGenerate()
 
 void AGISWorldBuilder::ClearGenerated()
 {
+    const int32 ActorCount = SpawnedActors.Num();
     for (AActor* Actor : SpawnedActors)
     {
         if (IsValid(Actor))
@@ -224,6 +246,11 @@ void AGISWorldBuilder::ClearGenerated()
     if (UWorld* World = GetWorld())
     {
         FlushPersistentDebugLines(World);
+    }
+
+    if (ActorCount > 0)
+    {
+        UE_LOG(LogGIS, Verbose, TEXT("GISWorldBuilder: Cleared %d spawned actors"), ActorCount);
     }
 }
 
@@ -281,7 +308,7 @@ void AGISWorldBuilder::SpawnPolygonActors(const TArray<FLandUsePolygon>& Polygon
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("GISWorldBuilder: Spawned %d polygon actors"), SpawnedActors.Num());
+    UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: Spawned %d polygon actors"), SpawnedActors.Num());
 }
 
 void AGISWorldBuilder::DrawDebugPolygons(const TArray<FLandUsePolygon>& Polygons) const
@@ -323,13 +350,15 @@ void AGISWorldBuilder::DrawDebugPolygons(const TArray<FLandUsePolygon>& Polygons
             1.2f
         );
     }
+
+    UE_LOG(LogGIS, Verbose, TEXT("GISWorldBuilder: Drew debug lines for %d polygons"), Polygons.Num());
 }
 
 void AGISWorldBuilder::PrintStatistics() const
 {
     if (GeneratedPolygons.Num() == 0)
     {
-        UE_LOG(LogTemp, Warning, TEXT("GISWorldBuilder: No polygons generated"));
+        UE_LOG(LogGIS, Warning, TEXT("GISWorldBuilder: No polygons generated"));
         return;
     }
 
@@ -344,38 +373,42 @@ void AGISWorldBuilder::PrintStatistics() const
         TotalArea += Poly.AreaSqM;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("========== GIS World Builder Statistics =========="));
-    UE_LOG(LogTemp, Log, TEXT("Total Polygons: %d | Total Area: %.1f m2"), GeneratedPolygons.Num(), TotalArea);
+    UE_LOG(LogGIS, Log, TEXT("========== GIS World Builder Statistics =========="));
+    UE_LOG(LogGIS, Log, TEXT("Total Polygons: %d | Total Area: %.1f m2"), GeneratedPolygons.Num(), TotalArea);
 
     for (const auto& Pair : CountMap)
     {
         const FString TypeName = UEnum::GetDisplayValueAsText(Pair.Key).ToString();
         const float TypeArea = AreaMap.FindRef(Pair.Key);
         const float Pct = (TotalArea > 0) ? (TypeArea / TotalArea * 100.0f) : 0.0f;
-        UE_LOG(LogTemp, Log, TEXT("  %-12s: %3d polygons | %10.1f m2 | %5.1f%%"),
+        UE_LOG(LogGIS, Log, TEXT("  %-12s: %3d polygons | %10.1f m2 | %5.1f%%"),
             *TypeName, Pair.Value, TypeArea, Pct);
     }
 
-    UE_LOG(LogTemp, Log, TEXT("=================================================="));
+    UE_LOG(LogGIS, Log, TEXT("=================================================="));
 }
 
 #if WITH_EDITOR
 void AGISWorldBuilder::GenerateInEditor()
 {
+    UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: GenerateInEditor called"));
     GenerateAll();
 }
 
 void AGISWorldBuilder::ClearEditorPreview()
 {
+    UE_LOG(LogGIS, Verbose, TEXT("GISWorldBuilder: ClearEditorPreview called"));
     ClearGenerated();
 }
 
 void AGISWorldBuilder::GenerateAndSaveDataAsset()
 {
+    UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: ===== GenerateAndSaveDataAsset START ====="));
+
     // 先生成
     if (DataSourceType == EGISDataSourceType::DataAsset)
     {
-        UE_LOG(LogTemp, Warning, TEXT("GISWorldBuilder: Cannot generate from DataAsset mode, switch to LocalFile or ArcGIS first"));
+        UE_LOG(LogGIS, Warning, TEXT("GISWorldBuilder: Cannot generate from DataAsset mode, switch to LocalFile or ArcGIS first"));
         return;
     }
 
@@ -383,7 +416,7 @@ void AGISWorldBuilder::GenerateAndSaveDataAsset()
 
     if (GeneratedPolygons.Num() == 0)
     {
-        UE_LOG(LogTemp, Warning, TEXT("GISWorldBuilder: No polygons to save"));
+        UE_LOG(LogGIS, Warning, TEXT("GISWorldBuilder: No polygons to save"));
         return;
     }
 
@@ -393,10 +426,12 @@ void AGISWorldBuilder::GenerateAndSaveDataAsset()
         *GetActorLabel().Replace(TEXT(" "), TEXT("_")));
     const FString FullPath = PackagePath + AssetName;
 
+    UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: Creating DataAsset package → %s"), *FullPath);
+
     UPackage* Package = CreatePackage(*FullPath);
     if (!Package)
     {
-        UE_LOG(LogTemp, Error, TEXT("GISWorldBuilder: Failed to create package %s"), *FullPath);
+        UE_LOG(LogGIS, Error, TEXT("GISWorldBuilder: Failed to create package %s"), *FullPath);
         return;
     }
 
@@ -424,6 +459,7 @@ void AGISWorldBuilder::GenerateAndSaveDataAsset()
     }
 
     // 自动构建空间索引以加速运行时查询
+    UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: Building spatial index..."));
     DataAsset->BuildSpatialIndex();
 
     // 保存
@@ -439,7 +475,7 @@ void AGISWorldBuilder::GenerateAndSaveDataAsset()
 
     if (bSaved)
     {
-        UE_LOG(LogTemp, Log, TEXT("GISWorldBuilder: Saved DataAsset to %s (%d polygons)"),
+        UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: Saved DataAsset to %s (%d polygons)"),
             *PackageFilePath, GeneratedPolygons.Num());
 
         // 自动设置引用
@@ -447,8 +483,10 @@ void AGISWorldBuilder::GenerateAndSaveDataAsset()
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("GISWorldBuilder: Failed to save DataAsset to %s"), *PackageFilePath);
+        UE_LOG(LogGIS, Error, TEXT("GISWorldBuilder: Failed to save DataAsset to %s"), *PackageFilePath);
     }
+
+    UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: ===== GenerateAndSaveDataAsset END ====="));
 }
 #endif
 

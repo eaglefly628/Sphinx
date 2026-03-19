@@ -1,5 +1,6 @@
 // RoadNetworkGraph.cpp - 道路网图结构实现
 #include "Polygon/RoadNetworkGraph.h"
+#include "GISProceduralModule.h"
 
 int32 FRoadNetworkGraph::AddNode(const FVector& Position, const FVector2D& GeoPosition)
 {
@@ -122,7 +123,7 @@ void FRoadNetworkGraph::Reset()
 
 void FRoadNetworkGraph::ComputeIntersectionsAndSplit()
 {
-    UE_LOG(LogTemp, Log, TEXT("RoadNetworkGraph: ComputeIntersectionsAndSplit - %d nodes, %d edges (before)"),
+    UE_LOG(LogGIS, Log, TEXT("RoadNetworkGraph: ComputeIntersectionsAndSplit - %d nodes, %d edges (before)"),
         Nodes.Num(), Edges.Num());
 
     // 收集所有需要分割的信息：{ EdgeID → 排序后的 t 参数列表 + 对应交点 }
@@ -213,7 +214,7 @@ void FRoadNetworkGraph::ComputeIntersectionsAndSplit()
 
     if (EdgeSplits.Num() == 0)
     {
-        UE_LOG(LogTemp, Log, TEXT("RoadNetworkGraph: No intersections found"));
+        UE_LOG(LogGIS, Log, TEXT("RoadNetworkGraph: No intersections found"));
         return;
     }
 
@@ -291,7 +292,7 @@ void FRoadNetworkGraph::ComputeIntersectionsAndSplit()
         TotalSplits += Splits.Num();
     }
 
-    UE_LOG(LogTemp, Log, TEXT("RoadNetworkGraph: Split %d edges at %d intersection points → %d nodes, %d edges (after)"),
+    UE_LOG(LogGIS, Log, TEXT("RoadNetworkGraph: Split %d edges at %d intersection points → %d nodes, %d edges (after)"),
         EdgeSplits.Num(), TotalSplits, Nodes.Num(), Edges.Num());
 }
 

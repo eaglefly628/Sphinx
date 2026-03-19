@@ -1,5 +1,6 @@
 // GeoJsonParser.cpp - GeoJSON 解析器实现
 #include "Data/GeoJsonParser.h"
+#include "GISProceduralModule.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -10,7 +11,7 @@ bool UGeoJsonParser::ParseFile(const FString& FilePath, TArray<FGISFeature>& Out
     FString JsonString;
     if (!FFileHelper::LoadFileToString(JsonString, *FilePath))
     {
-        UE_LOG(LogTemp, Error, TEXT("GeoJsonParser: Failed to load file: %s"), *FilePath);
+        UE_LOG(LogGIS, Error, TEXT("GeoJsonParser: Failed to load file: %s"), *FilePath);
         return false;
     }
 
@@ -24,7 +25,7 @@ bool UGeoJsonParser::ParseString(const FString& JsonString, TArray<FGISFeature>&
 
     if (!FJsonSerializer::Deserialize(Reader, RootObject) || !RootObject.IsValid())
     {
-        UE_LOG(LogTemp, Error, TEXT("GeoJsonParser: Failed to parse JSON"));
+        UE_LOG(LogGIS, Error, TEXT("GeoJsonParser: Failed to parse JSON"));
         return false;
     }
 
@@ -32,7 +33,7 @@ bool UGeoJsonParser::ParseString(const FString& JsonString, TArray<FGISFeature>&
     FString Type;
     if (!RootObject->TryGetStringField(TEXT("type"), Type))
     {
-        UE_LOG(LogTemp, Error, TEXT("GeoJsonParser: Missing 'type' field"));
+        UE_LOG(LogGIS, Error, TEXT("GeoJsonParser: Missing 'type' field"));
         return false;
     }
 
@@ -41,7 +42,7 @@ bool UGeoJsonParser::ParseString(const FString& JsonString, TArray<FGISFeature>&
         const TArray<TSharedPtr<FJsonValue>>* FeaturesArray;
         if (!RootObject->TryGetArrayField(TEXT("features"), FeaturesArray))
         {
-            UE_LOG(LogTemp, Error, TEXT("GeoJsonParser: Missing 'features' array"));
+            UE_LOG(LogGIS, Error, TEXT("GeoJsonParser: Missing 'features' array"));
             return false;
         }
 
@@ -73,11 +74,11 @@ bool UGeoJsonParser::ParseString(const FString& JsonString, TArray<FGISFeature>&
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("GeoJsonParser: Unsupported type: %s"), *Type);
+        UE_LOG(LogGIS, Warning, TEXT("GeoJsonParser: Unsupported type: %s"), *Type);
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("GeoJsonParser: Parsed %d features"), OutFeatures.Num());
+    UE_LOG(LogGIS, Log, TEXT("GeoJsonParser: Parsed %d features"), OutFeatures.Num());
     return OutFeatures.Num() > 0;
 }
 
@@ -251,7 +252,7 @@ bool UGeoJsonParser::ParseGeometry(const TSharedPtr<FJsonObject>& GeometryObject
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("GeoJsonParser: Unsupported geometry type: %s"), *GeomType);
+        UE_LOG(LogGIS, Warning, TEXT("GeoJsonParser: Unsupported geometry type: %s"), *GeomType);
         return false;
     }
 
