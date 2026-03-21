@@ -1,0 +1,63 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "natural": "water",
+        "name": "黄浦江",
+        "water": "river",
+        "sphinx_feature_id": 10,
+        "sphinx_clipped": true
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.4900, 31.2400],
+          [121.4910, 31.2400],
+          [121.4910, 31.2410],
+          [121.4908, 31.2430],
+          [121.4905, 31.2450],
+          [121.4900, 31.2450],
+          [121.4900, 31.2400]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "leisure": "park",
+        "name": "滨江公园",
+        "sphinx_feature_id": 12
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.4912, 31.2410],
+          [121.4920, 31.2410],
+          [121.4920, 31.2430],
+          [121.4912, 31.2430],
+          [121.4912, 31.2410]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "highway": "secondary",
+        "name": "陆家嘴环路",
+        "sphinx_feature_id": 7,
+        "sphinx_clipped": true
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [121.4950, 31.2400],
+          [121.4960, 31.2420],
+          [121.4940, 31.2430],
+          [121.4920, 31.2420]
+        ]
+      }
+    }
+  ]
+}

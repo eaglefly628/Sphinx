@@ -2,16 +2,18 @@
 #include "GISProceduralModule.h"
 #include "Modules/ModuleManager.h"
 
+DEFINE_LOG_CATEGORY(LogGIS);
+
 #define LOCTEXT_NAMESPACE "FGISProceduralModule"
 
 void FGISProceduralModule::StartupModule()
 {
-    UE_LOG(LogTemp, Log, TEXT("GISProcedural: Module started"));
+    UE_LOG(LogGIS, Log, TEXT("GISProcedural: Module started"));
 }
 
 void FGISProceduralModule::ShutdownModule()
 {
-    UE_LOG(LogTemp, Log, TEXT("GISProcedural: Module shutdown"));
+    UE_LOG(LogGIS, Log, TEXT("GISProcedural: Module shutdown"));
 }
 
 #undef LOCTEXT_NAMESPACE

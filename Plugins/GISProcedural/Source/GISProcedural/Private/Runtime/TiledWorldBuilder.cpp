@@ -1,5 +1,6 @@
 // TiledWorldBuilder.cpp - 编辑器批量 tile 生成实现
 #include "Runtime/TiledWorldBuilder.h"
+#include "GISProceduralModule.h"
 #include "Polygon/PolygonDeriver.h"
 #include "Polygon/LandUseClassifier.h"
 #include "Data/TiledFileProvider.h"
@@ -29,6 +30,8 @@ ATiledWorldBuilder::ATiledWorldBuilder()
 
 bool ATiledWorldBuilder::InitBuildComponents()
 {
+    UE_LOG(LogGIS, Log, TEXT("TiledWorldBuilder: InitBuildComponents..."));
+
     // 初始化 TiledFileProvider
     if (!FileProvider)
     {
@@ -40,7 +43,7 @@ bool ATiledWorldBuilder::InitBuildComponents()
 
     if (!FileProvider->Initialize())
     {
-        UE_LOG(LogTemp, Error, TEXT("TiledWorldBuilder: Failed to initialize TiledFileProvider"));
+        UE_LOG(LogGIS, Error, TEXT("TiledWorldBuilder: Failed to initialize TiledFileProvider"));
         return false;
     }
 
@@ -55,19 +58,24 @@ bool ATiledWorldBuilder::InitBuildComponents()
     PolygonDeriver->RoadClassWeights = RoadClassWeights;
     PolygonDeriver->DEMFormat = DEMFormat;
 
+    UE_LOG(LogGIS, Log, TEXT("TiledWorldBuilder: InitBuildComponents complete"));
     return true;
 }
 
 #if WITH_EDITOR
 void ATiledWorldBuilder::GenerateAllTiles()
 {
+    UE_LOG(LogGIS, Log, TEXT("TiledWorldBuilder: ===== GenerateAllTiles START ====="));
+    const double StartTime = FPlatformTime::Seconds();
+
     if (!InitBuildComponents())
     {
         return;
     }
 
     const FTileManifest& Manifest = FileProvider->GetManifest();
-    UE_LOG(LogTemp, Log, TEXT("TiledWorldBuilder: Starting generation for %d tiles"), Manifest.Tiles.Num());
+    UE_LOG(LogGIS, Log, TEXT("TiledWorldBuilder: Processing %d tiles (grid %dx%d, tile=%.0fm)"),
+        Manifest.Tiles.Num(), Manifest.NumCols, Manifest.NumRows, Manifest.TileSizeM);
 
     // 创建清单 DataAsset
     const FString AssetName = TEXT("TiledLandUse_") +
@@ -77,7 +85,7 @@ void ATiledWorldBuilder::GenerateAllTiles()
     UPackage* CatalogPackage = CreatePackage(*FullPath);
     if (!CatalogPackage)
     {
-        UE_LOG(LogTemp, Error, TEXT("TiledWorldBuilder: Failed to create package %s"), *FullPath);
+        UE_LOG(LogGIS, Error, TEXT("TiledWorldBuilder: Failed to create package %s"), *FullPath);
         return;
     }
 
@@ -93,11 +101,17 @@ void ATiledWorldBuilder::GenerateAllTiles()
     TiledAsset->GeneratedTime = FDateTime::Now();
 
     int32 SuccessCount = 0;
+    int32 SkipCount = 0;
+    int32 FailCount = 0;
     int32 TotalPolygons = 0;
 
-    for (const FTileEntry& Entry : Manifest.Tiles)
+    for (int32 i = 0; i < Manifest.Tiles.Num(); ++i)
     {
+        const FTileEntry& Entry = Manifest.Tiles[i];
         const FString TileID = FString::Printf(TEXT("tile_%d_%d"), Entry.Col, Entry.Row);
+
+        UE_LOG(LogGIS, Log, TEXT("TiledWorldBuilder: [%d/%d] Processing %s (%d features)..."),
+            i + 1, Manifest.Tiles.Num(), *TileID, Entry.FeatureCount);
 
         ULandUseMapDataAsset* TileAsset = GenerateTileDataAsset(Entry, TileID);
         if (TileAsset)
@@ -106,9 +120,18 @@ void ATiledWorldBuilder::GenerateAllTiles()
             TotalPolygons += TileAsset->Polygons.Num();
             SuccessCount++;
         }
+        else if (Entry.FeatureCount == 0)
+        {
+            SkipCount++;
+        }
+        else
+        {
+            FailCount++;
+        }
     }
 
     // 保存清单
+    UE_LOG(LogGIS, Log, TEXT("TiledWorldBuilder: Saving catalog DataAsset..."));
     FAssetRegistryModule::AssetCreated(TiledAsset);
     TiledAsset->MarkPackageDirty();
 
@@ -123,16 +146,22 @@ void ATiledWorldBuilder::GenerateAllTiles()
     LastGeneratedTileCount = SuccessCount;
     LastTotalPolygonCount = TotalPolygons;
 
-    UE_LOG(LogTemp, Log, TEXT("========================================"));
-    UE_LOG(LogTemp, Log, TEXT("TiledWorldBuilder: Generation complete"));
-    UE_LOG(LogTemp, Log, TEXT("  Tiles: %d/%d succeeded"), SuccessCount, Manifest.Tiles.Num());
-    UE_LOG(LogTemp, Log, TEXT("  Total polygons: %d"), TotalPolygons);
-    UE_LOG(LogTemp, Log, TEXT("  Saved catalog: %s"), *PackageFilePath);
-    UE_LOG(LogTemp, Log, TEXT("========================================"));
+    const double Elapsed = FPlatformTime::Seconds() - StartTime;
+    UE_LOG(LogGIS, Log, TEXT("========================================"));
+    UE_LOG(LogGIS, Log, TEXT("TiledWorldBuilder: Generation complete"));
+    UE_LOG(LogGIS, Log, TEXT("  Tiles: %d success / %d skipped / %d failed (of %d)"),
+        SuccessCount, SkipCount, FailCount, Manifest.Tiles.Num());
+    UE_LOG(LogGIS, Log, TEXT("  Total polygons: %d"), TotalPolygons);
+    UE_LOG(LogGIS, Log, TEXT("  Saved catalog: %s"), *PackageFilePath);
+    UE_LOG(LogGIS, Log, TEXT("  Elapsed: %.2fs (%.1f tiles/sec)"),
+        Elapsed, Elapsed > 0 ? Manifest.Tiles.Num() / Elapsed : 0);
+    UE_LOG(LogGIS, Log, TEXT("========================================"));
 }
 
 void ATiledWorldBuilder::GenerateSingleTestTile()
 {
+    UE_LOG(LogGIS, Log, TEXT("TiledWorldBuilder: GenerateSingleTestTile START"));
+
     if (!InitBuildComponents())
     {
         return;
@@ -141,7 +170,7 @@ void ATiledWorldBuilder::GenerateSingleTestTile()
     const FTileManifest& Manifest = FileProvider->GetManifest();
     if (Manifest.Tiles.Num() == 0)
     {
-        UE_LOG(LogTemp, Warning, TEXT("TiledWorldBuilder: No tiles in manifest"));
+        UE_LOG(LogGIS, Warning, TEXT("TiledWorldBuilder: No tiles in manifest"));
         return;
     }
 
@@ -156,13 +185,17 @@ void ATiledWorldBuilder::GenerateSingleTestTile()
     }
 
     const FString TileID = FString::Printf(TEXT("tile_%d_%d"), BestTile->Col, BestTile->Row);
-    UE_LOG(LogTemp, Log, TEXT("TiledWorldBuilder: Testing with tile %s (%d features)"),
+    UE_LOG(LogGIS, Log, TEXT("TiledWorldBuilder: Selected test tile %s (%d features)"),
         *TileID, BestTile->FeatureCount);
 
     ULandUseMapDataAsset* Asset = GenerateTileDataAsset(*BestTile, TileID);
     if (Asset)
     {
-        UE_LOG(LogTemp, Log, TEXT("TiledWorldBuilder: Test tile generated %d polygons"), Asset->Polygons.Num());
+        UE_LOG(LogGIS, Log, TEXT("TiledWorldBuilder: Test tile → %d polygons"), Asset->Polygons.Num());
+    }
+    else
+    {
+        UE_LOG(LogGIS, Warning, TEXT("TiledWorldBuilder: Test tile generation failed"));
     }
 }
 #endif
@@ -171,21 +204,25 @@ ULandUseMapDataAsset* ATiledWorldBuilder::GenerateTileDataAsset(
     const FTileEntry& Entry, const FString& TileID)
 {
 #if WITH_EDITOR
-    // 查询该 tile 的要素
+    const double TileStart = FPlatformTime::Seconds();
+
+    // Step 1: 查询该 tile 的要素
     TArray<FGISFeature> Features;
     if (!FileProvider->QueryFeatures(Entry.GeoBounds, Features))
     {
-        UE_LOG(LogTemp, Warning, TEXT("TiledWorldBuilder: Failed to query features for %s"), *TileID);
+        UE_LOG(LogGIS, Warning, TEXT("TiledWorldBuilder: [%s] Failed to query features"), *TileID);
         return nullptr;
     }
 
     if (Features.Num() == 0)
     {
-        UE_LOG(LogTemp, Verbose, TEXT("TiledWorldBuilder: Tile %s has no features, skipping"), *TileID);
+        UE_LOG(LogGIS, Verbose, TEXT("TiledWorldBuilder: [%s] No features, skipping"), *TileID);
         return nullptr;
     }
 
-    // 设置数据源并生成 polygon
+    UE_LOG(LogGIS, Verbose, TEXT("TiledWorldBuilder: [%s] Step 1/5 → %d features loaded"), *TileID, Features.Num());
+
+    // Step 2: 设置数据源并生成 polygon
     PolygonDeriver->SetDataProvider(FileProvider);
     PolygonDeriver->SetQueryBounds(Entry.GeoBounds);
 
@@ -195,17 +232,19 @@ ULandUseMapDataAsset* ATiledWorldBuilder::GenerateTileDataAsset(
 
     if (Polygons.Num() == 0)
     {
-        UE_LOG(LogTemp, Verbose, TEXT("TiledWorldBuilder: Tile %s generated 0 polygons"), *TileID);
+        UE_LOG(LogGIS, Verbose, TEXT("TiledWorldBuilder: [%s] Generated 0 polygons, skipping"), *TileID);
         return nullptr;
     }
 
-    // 设置 tile 坐标
+    UE_LOG(LogGIS, Verbose, TEXT("TiledWorldBuilder: [%s] Step 2/5 → %d polygons generated"), *TileID, Polygons.Num());
+
+    // Step 3: 设置 tile 坐标
     for (FLandUsePolygon& Poly : Polygons)
     {
         Poly.TileCoord = FIntPoint(Entry.Col, Entry.Row);
     }
 
-    // 尝试 LandCover 融合
+    // Step 4: 尝试 LandCover 融合
     TArray<uint8> LandCoverGrid;
     int32 LCWidth = 0, LCHeight = 0;
     if (FileProvider->QueryLandCover(Entry.GeoBounds, 10.0f, LandCoverGrid, LCWidth, LCHeight))
@@ -214,16 +253,22 @@ ULandUseMapDataAsset* ATiledWorldBuilder::GenerateTileDataAsset(
             FVector2D(Entry.GeoBounds.MinLon, Entry.GeoBounds.MinLat),
             FVector2D(Entry.GeoBounds.MaxLon, Entry.GeoBounds.MaxLat));
         ULandUseClassifier::FuseLandCoverData(Polygons, LandCoverGrid, LCWidth, LCHeight, GridBounds2D);
+        UE_LOG(LogGIS, Verbose, TEXT("TiledWorldBuilder: [%s] Step 4/5 → LandCover fused (%dx%d grid)"),
+            *TileID, LCWidth, LCHeight);
+    }
+    else
+    {
+        UE_LOG(LogGIS, Verbose, TEXT("TiledWorldBuilder: [%s] Step 4/5 → No LandCover data"), *TileID);
     }
 
-    // 创建 DataAsset
+    // Step 5: 创建 DataAsset
     const FString AssetName = TileID;
     const FString TilePackagePath = OutputPackagePath + TEXT("Tiles/") + AssetName;
 
     UPackage* Package = CreatePackage(*TilePackagePath);
     if (!Package)
     {
-        UE_LOG(LogTemp, Error, TEXT("TiledWorldBuilder: Failed to create package for %s"), *TileID);
+        UE_LOG(LogGIS, Error, TEXT("TiledWorldBuilder: [%s] Failed to create package"), *TileID);
         return nullptr;
     }
 
@@ -251,8 +296,8 @@ ULandUseMapDataAsset* ATiledWorldBuilder::GenerateTileDataAsset(
     SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
     UPackage::SavePackage(Package, Asset, *PackageFilePath, SaveArgs);
 
-    UE_LOG(LogTemp, Log, TEXT("TiledWorldBuilder: Generated %s → %d polygons"),
-        *TileID, Asset->Polygons.Num());
+    UE_LOG(LogGIS, Log, TEXT("TiledWorldBuilder: [%s] Step 5/5 → saved %d polygons (%.3fs)"),
+        *TileID, Asset->Polygons.Num(), FPlatformTime::Seconds() - TileStart);
 
     return Asset;
 #else

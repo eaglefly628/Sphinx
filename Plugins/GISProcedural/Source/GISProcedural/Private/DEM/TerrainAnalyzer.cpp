@@ -1,5 +1,6 @@
 // TerrainAnalyzer.cpp - 地形分析器实现
 #include "DEM/TerrainAnalyzer.h"
+#include "GISProceduralModule.h"
 #include "DEM/DEMParser.h"
 #include "Data/GISCoordinate.h"
 
@@ -13,31 +14,31 @@ TArray<FTerrainZone> UTerrainAnalyzer::AnalyzeTerrain(
 
     if (!BuildElevationGrid(DEMParser, MinLon, MinLat, MaxLon, MaxLat))
     {
-        UE_LOG(LogTemp, Error, TEXT("TerrainAnalyzer: Failed to build elevation grid"));
+        UE_LOG(LogGIS, Error, TEXT("TerrainAnalyzer: Failed to build elevation grid"));
         return Result;
     }
 
     if (!ComputeSlopeAspect())
     {
-        UE_LOG(LogTemp, Error, TEXT("TerrainAnalyzer: Failed to compute slope/aspect"));
+        UE_LOG(LogGIS, Error, TEXT("TerrainAnalyzer: Failed to compute slope/aspect"));
         return Result;
     }
 
     if (!ClassifyTerrainGrid())
     {
-        UE_LOG(LogTemp, Error, TEXT("TerrainAnalyzer: Failed to classify terrain"));
+        UE_LOG(LogGIS, Error, TEXT("TerrainAnalyzer: Failed to classify terrain"));
         return Result;
     }
 
     if (!LabelConnectedZones())
     {
-        UE_LOG(LogTemp, Error, TEXT("TerrainAnalyzer: Failed to label zones"));
+        UE_LOG(LogGIS, Error, TEXT("TerrainAnalyzer: Failed to label zones"));
         return Result;
     }
 
     Result = ExtractZoneBoundaries(OriginLon, OriginLat);
 
-    UE_LOG(LogTemp, Log, TEXT("TerrainAnalyzer: Generated %d terrain zones"), Result.Num());
+    UE_LOG(LogGIS, Log, TEXT("TerrainAnalyzer: Generated %d terrain zones"), Result.Num());
     return Result;
 }
 
@@ -61,32 +62,32 @@ TArray<FTerrainZone> UTerrainAnalyzer::AnalyzeFromGrid(
 
     if (ElevationGrid.Num() != Width * Height || Width == 0 || Height == 0)
     {
-        UE_LOG(LogTemp, Error, TEXT("TerrainAnalyzer: Invalid grid data (%d elements, %dx%d)"),
+        UE_LOG(LogGIS, Error, TEXT("TerrainAnalyzer: Invalid grid data (%d elements, %dx%d)"),
             ElevationGrid.Num(), Width, Height);
         return Result;
     }
 
     if (!ComputeSlopeAspect())
     {
-        UE_LOG(LogTemp, Error, TEXT("TerrainAnalyzer: Failed to compute slope/aspect from grid"));
+        UE_LOG(LogGIS, Error, TEXT("TerrainAnalyzer: Failed to compute slope/aspect from grid"));
         return Result;
     }
 
     if (!ClassifyTerrainGrid())
     {
-        UE_LOG(LogTemp, Error, TEXT("TerrainAnalyzer: Failed to classify terrain from grid"));
+        UE_LOG(LogGIS, Error, TEXT("TerrainAnalyzer: Failed to classify terrain from grid"));
         return Result;
     }
 
     if (!LabelConnectedZones())
     {
-        UE_LOG(LogTemp, Error, TEXT("TerrainAnalyzer: Failed to label zones from grid"));
+        UE_LOG(LogGIS, Error, TEXT("TerrainAnalyzer: Failed to label zones from grid"));
         return Result;
     }
 
     Result = ExtractZoneBoundaries(OriginLon, OriginLat);
 
-    UE_LOG(LogTemp, Log, TEXT("TerrainAnalyzer: AnalyzeFromGrid produced %d zones"), Result.Num());
+    UE_LOG(LogGIS, Log, TEXT("TerrainAnalyzer: AnalyzeFromGrid produced %d zones"), Result.Num());
     return Result;
 }
 
@@ -141,7 +142,7 @@ bool UTerrainAnalyzer::ComputeSlopeAspect()
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("TerrainAnalyzer: Computed slope/aspect for %dx%d grid"), GridWidth, GridHeight);
+    UE_LOG(LogGIS, Log, TEXT("TerrainAnalyzer: Computed slope/aspect for %dx%d grid"), GridWidth, GridHeight);
     return true;
 }
 
@@ -214,7 +215,7 @@ bool UTerrainAnalyzer::ClassifyTerrainGrid()
         ClassGrid[i] = ClassifyPixel(ElevationGrid[i], SlopeGrid[i]);
     }
 
-    UE_LOG(LogTemp, Log, TEXT("TerrainAnalyzer: Classified %d pixels"), N);
+    UE_LOG(LogGIS, Log, TEXT("TerrainAnalyzer: Classified %d pixels"), N);
     return true;
 }
 
@@ -259,7 +260,7 @@ bool UTerrainAnalyzer::LabelConnectedZones()
 
     MergeSmallZones(NumZones, CellAreaSqM);
 
-    UE_LOG(LogTemp, Log, TEXT("TerrainAnalyzer: Labeled %d connected zones"), NumZones);
+    UE_LOG(LogGIS, Log, TEXT("TerrainAnalyzer: Labeled %d connected zones"), NumZones);
     return true;
 }
 
@@ -587,7 +588,7 @@ TArray<FTerrainZone> UTerrainAnalyzer::ExtractZoneBoundaries(double OriginLon, d
         Result.Add(Zone);
     }
 
-    UE_LOG(LogTemp, Log, TEXT("TerrainAnalyzer: Extracted %d zone boundaries"), Result.Num());
+    UE_LOG(LogGIS, Log, TEXT("TerrainAnalyzer: Extracted %d zone boundaries"), Result.Num());
     return Result;
 }
 

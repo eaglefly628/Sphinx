@@ -1,5 +1,6 @@
 // LandUseMapDataAsset.cpp
 #include "Data/LandUseMapDataAsset.h"
+#include "GISProceduralModule.h"
 
 TArray<FLandUsePolygon> ULandUseMapDataAsset::GetPolygonsByType(ELandUseType Type) const
 {
@@ -28,6 +29,8 @@ TArray<FLandUsePolygon> ULandUseMapDataAsset::GetPolygonsInWorldBounds(const FBo
         const int32 MinCellY = FMath::FloorToInt32(WorldBounds.Min.Y / SpatialCellSize);
         const int32 MaxCellY = FMath::FloorToInt32(WorldBounds.Max.Y / SpatialCellSize);
 
+        const int32 CellsChecked = (MaxCellX - MinCellX + 1) * (MaxCellY - MinCellY + 1);
+
         for (int32 CX = MinCellX; CX <= MaxCellX; ++CX)
         {
             for (int32 CY = MinCellY; CY <= MaxCellY; ++CY)
@@ -49,6 +52,9 @@ TArray<FLandUsePolygon> ULandUseMapDataAsset::GetPolygonsInWorldBounds(const FBo
                 }
             }
         }
+
+        UE_LOG(LogGIS, Verbose, TEXT("LandUseMapDataAsset: SpatialIndex query → %d polygons (%d cells checked, %d candidates)"),
+            Result.Num(), CellsChecked, VisitedIndices.Num());
         return Result;
     }
 
@@ -61,6 +67,8 @@ TArray<FLandUsePolygon> ULandUseMapDataAsset::GetPolygonsInWorldBounds(const FBo
             Result.Add(Poly);
         }
     }
+
+    UE_LOG(LogGIS, Verbose, TEXT("LandUseMapDataAsset: Linear scan → %d/%d polygons in bounds"), Result.Num(), Polygons.Num());
     return Result;
 }
 
@@ -90,7 +98,7 @@ void ULandUseMapDataAsset::BuildSpatialIndex(float CellSizeWorld)
         SpatialGrid.FindOrAdd(Cell).Add(i);
     }
 
-    UE_LOG(LogTemp, Log, TEXT("LandUseMapDataAsset: Built spatial index with %d cells for %d polygons (cell=%.0fcm)"),
+    UE_LOG(LogGIS, Log, TEXT("LandUseMapDataAsset: Built spatial index → %d cells, %d polygons (cell=%.0fcm)"),
         SpatialGrid.Num(), Polygons.Num(), CellSizeWorld);
 }
 
@@ -122,6 +130,7 @@ void ULandUseMapDataAsset::LoadTileAsync(const FString& TileID)
     if (LoadedTileCache.Contains(TileID))
     {
         // 已加载，直接回调
+        UE_LOG(LogGIS, Verbose, TEXT("LandUseMapDataAsset: Tile '%s' already in cache, broadcasting"), *TileID);
         OnTileLoaded.Broadcast(TileID);
         return;
     }
@@ -129,17 +138,18 @@ void ULandUseMapDataAsset::LoadTileAsync(const FString& TileID)
     const TSoftObjectPtr<ULandUseMapDataAsset>* SoftPtr = TileAssets.Find(TileID);
     if (!SoftPtr)
     {
-        UE_LOG(LogTemp, Warning, TEXT("LandUseMapDataAsset: TileID '%s' not found in TileAssets map"), *TileID);
+        UE_LOG(LogGIS, Warning, TEXT("LandUseMapDataAsset: TileID '%s' not found in TileAssets map"), *TileID);
         return;
     }
 
     if (SoftPtr->IsNull())
     {
-        UE_LOG(LogTemp, Warning, TEXT("LandUseMapDataAsset: TileID '%s' has null soft reference"), *TileID);
+        UE_LOG(LogGIS, Warning, TEXT("LandUseMapDataAsset: TileID '%s' has null soft reference"), *TileID);
         return;
     }
 
     // 异步流式加载
+    UE_LOG(LogGIS, Log, TEXT("LandUseMapDataAsset: Starting async load for tile '%s'"), *TileID);
     FSoftObjectPath AssetPath = SoftPtr->ToSoftObjectPath();
     TWeakObjectPtr<ULandUseMapDataAsset> WeakThis(this);
     StreamableManager.RequestAsyncLoad(
@@ -149,6 +159,7 @@ void ULandUseMapDataAsset::LoadTileAsync(const FString& TileID)
             ULandUseMapDataAsset* Self = WeakThis.Get();
             if (!Self)
             {
+                UE_LOG(LogGIS, Warning, TEXT("LandUseMapDataAsset: Owner GC'd before async load completed for '%s'"), *TileID);
                 return;
             }
 
@@ -157,13 +168,13 @@ void ULandUseMapDataAsset::LoadTileAsync(const FString& TileID)
             if (TileAsset)
             {
                 Self->LoadedTileCache.Add(TileID, TileAsset);
-                UE_LOG(LogTemp, Log, TEXT("LandUseMapDataAsset: Async loaded tile '%s' (%d polygons)"),
+                UE_LOG(LogGIS, Log, TEXT("LandUseMapDataAsset: Async loaded tile '%s' → %d polygons"),
                     *TileID, TileAsset->Polygons.Num());
                 Self->OnTileLoaded.Broadcast(TileID);
             }
             else
             {
-                UE_LOG(LogTemp, Error, TEXT("LandUseMapDataAsset: Failed to load tile '%s'"), *TileID);
+                UE_LOG(LogGIS, Error, TEXT("LandUseMapDataAsset: Async load failed for tile '%s' (resolve returned null)"), *TileID);
             }
         })
     );
@@ -173,26 +184,33 @@ ULandUseMapDataAsset* ULandUseMapDataAsset::LoadTileSync(const FString& TileID)
 {
     if (ULandUseMapDataAsset** Cached = LoadedTileCache.Find(TileID))
     {
+        UE_LOG(LogGIS, Verbose, TEXT("LandUseMapDataAsset: LoadTileSync '%s' → cache hit"), *TileID);
         return *Cached;
     }
 
     const TSoftObjectPtr<ULandUseMapDataAsset>* SoftPtr = TileAssets.Find(TileID);
     if (!SoftPtr || SoftPtr->IsNull())
     {
+        UE_LOG(LogGIS, Warning, TEXT("LandUseMapDataAsset: LoadTileSync '%s' → not found or null"), *TileID);
         return nullptr;
     }
 
+    UE_LOG(LogGIS, Log, TEXT("LandUseMapDataAsset: LoadTileSync '%s' → synchronous load..."), *TileID);
     ULandUseMapDataAsset* TileAsset = SoftPtr->LoadSynchronous();
     if (TileAsset)
     {
         LoadedTileCache.Add(TileID, TileAsset);
+        UE_LOG(LogGIS, Log, TEXT("LandUseMapDataAsset: LoadTileSync '%s' → %d polygons"), *TileID, TileAsset->Polygons.Num());
     }
     return TileAsset;
 }
 
 void ULandUseMapDataAsset::UnloadTile(const FString& TileID)
 {
-    LoadedTileCache.Remove(TileID);
+    if (LoadedTileCache.Remove(TileID) > 0)
+    {
+        UE_LOG(LogGIS, Log, TEXT("LandUseMapDataAsset: Unloaded tile '%s'"), *TileID);
+    }
 }
 
 TArray<FString> ULandUseMapDataAsset::GetTileIDsInWorldBounds(const FBox& WorldBounds) const
@@ -225,5 +243,7 @@ TArray<FString> ULandUseMapDataAsset::GetTileIDsInWorldBounds(const FBox& WorldB
             }
         }
     }
+
+    UE_LOG(LogGIS, Verbose, TEXT("LandUseMapDataAsset: GetTileIDsInWorldBounds → %d tiles"), Result.Num());
     return Result;
 }

@@ -1,5 +1,6 @@
 // DEMParser.cpp - DEM 瓦片解析器实现
 #include "DEM/DEMParser.h"
+#include "GISProceduralModule.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "IImageWrapperModule.h"
@@ -30,7 +31,7 @@ bool UDEMParser::LoadTile(const FString& FilePath)
             bSuccess = ParseHeightmapRAW(FilePath, Info, Data);
             break;
         default:
-            UE_LOG(LogTemp, Error, TEXT("DEMParser: Unknown format for %s"), *FilePath);
+            UE_LOG(LogGIS, Error, TEXT("DEMParser: Unknown format for %s"), *FilePath);
             return false;
     }
 
@@ -39,7 +40,7 @@ bool UDEMParser::LoadTile(const FString& FilePath)
         Info.FilePath = FilePath;
         Tiles.Add(Info);
         TileData.Add(MoveTemp(Data));
-        UE_LOG(LogTemp, Log, TEXT("DEMParser: Loaded tile %s (%dx%d, lon %.2f~%.2f, lat %.2f~%.2f)"),
+        UE_LOG(LogGIS, Log, TEXT("DEMParser: Loaded tile %s (%dx%d, lon %.2f~%.2f, lat %.2f~%.2f)"),
             *FilePath, Info.Width, Info.Height, Info.MinLon, Info.MaxLon, Info.MinLat, Info.MaxLat);
     }
 
@@ -65,7 +66,7 @@ int32 UDEMParser::LoadTilesFromDirectory(const FString& DirectoryPath)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("DEMParser: Loaded %d tiles from %s"), LoadedCount, *DirectoryPath);
+    UE_LOG(LogGIS, Log, TEXT("DEMParser: Loaded %d tiles from %s"), LoadedCount, *DirectoryPath);
     return LoadedCount;
 }
 
@@ -146,7 +147,7 @@ bool UDEMParser::ParseGeoTIFF(const FString& FilePath, FDEMTileInfo& OutInfo, TA
     TArray<uint8> FileBytes;
     if (!FFileHelper::LoadFileToArray(FileBytes, *FilePath))
     {
-        UE_LOG(LogTemp, Error, TEXT("DEMParser: Failed to read file %s"), *FilePath);
+        UE_LOG(LogGIS, Error, TEXT("DEMParser: Failed to read file %s"), *FilePath);
         return false;
     }
 
@@ -168,7 +169,7 @@ bool UDEMParser::ParseGeoTIFF(const FString& FilePath, FDEMTileInfo& OutInfo, TA
         }
         else
         {
-            UE_LOG(LogTemp, Error, TEXT("DEMParser: Unrecognized .hgt file size: %lld"), FileSize);
+            UE_LOG(LogGIS, Error, TEXT("DEMParser: Unrecognized .hgt file size: %lld"), FileSize);
             return false;
         }
 
@@ -215,20 +216,20 @@ bool UDEMParser::ParseGeoTIFF(const FString& FilePath, FDEMTileInfo& OutInfo, TA
     const bool bBigEndian = (FileBytes[0] == 'M' && FileBytes[1] == 'M');
     if (!bLittleEndian && !bBigEndian)
     {
-        UE_LOG(LogTemp, Error, TEXT("DEMParser: Not a valid TIFF file: %s"), *FilePath);
+        UE_LOG(LogGIS, Error, TEXT("DEMParser: Not a valid TIFF file: %s"), *FilePath);
         return false;
     }
 
     // 简化实现：读取 TIFF IFD 获取宽高和数据偏移
     // 对于标准 SRTM GeoTIFF，数据通常是 int16 strip
-    UE_LOG(LogTemp, Warning, TEXT("DEMParser: Full GeoTIFF parsing is simplified. "
+    UE_LOG(LogGIS, Warning, TEXT("DEMParser: Full GeoTIFF parsing is simplified. "
         "For production use, integrate GDAL or libgeotiff. File: %s"), *FilePath);
 
     // 使用手动配置的 tile info
     OutInfo = ManualTileInfo;
     if (OutInfo.Width <= 0 || OutInfo.Height <= 0)
     {
-        UE_LOG(LogTemp, Error, TEXT("DEMParser: ManualTileInfo required for GeoTIFF. "
+        UE_LOG(LogGIS, Error, TEXT("DEMParser: ManualTileInfo required for GeoTIFF. "
             "Set Width/Height and geo bounds."));
         return false;
     }
@@ -267,7 +268,7 @@ bool UDEMParser::ParseHeightmapPNG(const FString& FilePath, FDEMTileInfo& OutInf
     TArray<uint8> FileBytes;
     if (!FFileHelper::LoadFileToArray(FileBytes, *FilePath))
     {
-        UE_LOG(LogTemp, Error, TEXT("DEMParser: Failed to read PNG %s"), *FilePath);
+        UE_LOG(LogGIS, Error, TEXT("DEMParser: Failed to read PNG %s"), *FilePath);
         return false;
     }
 
@@ -277,7 +278,7 @@ bool UDEMParser::ParseHeightmapPNG(const FString& FilePath, FDEMTileInfo& OutInf
 
     if (!ImageWrapper.IsValid() || !ImageWrapper->SetCompressed(FileBytes.GetData(), FileBytes.Num()))
     {
-        UE_LOG(LogTemp, Error, TEXT("DEMParser: Failed to decode PNG %s"), *FilePath);
+        UE_LOG(LogGIS, Error, TEXT("DEMParser: Failed to decode PNG %s"), *FilePath);
         return false;
     }
 
@@ -300,7 +301,7 @@ bool UDEMParser::ParseHeightmapPNG(const FString& FilePath, FDEMTileInfo& OutInf
     TArray<uint8> RawPixels;
     if (!ImageWrapper->GetRaw(ERGBFormat::RGBA, 8, RawPixels))
     {
-        UE_LOG(LogTemp, Error, TEXT("DEMParser: Failed to get raw pixels from %s"), *FilePath);
+        UE_LOG(LogGIS, Error, TEXT("DEMParser: Failed to get raw pixels from %s"), *FilePath);
         return false;
     }
 
@@ -366,7 +367,7 @@ bool UDEMParser::ParseHeightmapRAW(const FString& FilePath, FDEMTileInfo& OutInf
         }
         else
         {
-            UE_LOG(LogTemp, Error, TEXT("DEMParser: Cannot infer RAW dimensions. Set ManualTileInfo."));
+            UE_LOG(LogGIS, Error, TEXT("DEMParser: Cannot infer RAW dimensions. Set ManualTileInfo."));
             return false;
         }
     }

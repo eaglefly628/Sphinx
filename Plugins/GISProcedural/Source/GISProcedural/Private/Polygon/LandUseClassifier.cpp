@@ -1,5 +1,6 @@
 // LandUseClassifier.cpp - 土地分类器实现
 #include "Polygon/LandUseClassifier.h"
+#include "GISProceduralModule.h"
 
 void ULandUseClassifier::ClassifySingle(FLandUsePolygon& Polygon, const ULandUseClassifyRules* Rules)
 {
@@ -191,7 +192,7 @@ void ULandUseClassifier::FuseLandCoverData(
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("LandUseClassifier: Fused LandCover data, corrected %d/%d polygons"), FusedCount, Polygons.Num());
+    UE_LOG(LogGIS, Log, TEXT("LandUseClassifier: Fused LandCover data, corrected %d/%d polygons"), FusedCount, Polygons.Num());
 }
 
 ELandUseType ULandUseClassifier::DetermineType(const FLandUsePolygon& Polygon, const ULandUseClassifyRules* Rules)

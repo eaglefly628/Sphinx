@@ -1,5 +1,6 @@
 // ArcGISRestProvider.cpp - ArcGIS REST API 数据源实现
 #include "Data/ArcGISRestProvider.h"
+#include "GISProceduralModule.h"
 #include "Data/GeoJsonParser.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
@@ -10,7 +11,7 @@ bool UArcGISRestProvider::QueryFeatures(const FGeoRect& Bounds, TArray<FGISFeatu
 {
     if (FeatureServiceUrl.IsEmpty())
     {
-        UE_LOG(LogTemp, Error, TEXT("ArcGISRestProvider: FeatureServiceUrl is empty"));
+        UE_LOG(LogGIS, Error, TEXT("ArcGISRestProvider: FeatureServiceUrl is empty"));
         return false;
     }
 
@@ -26,7 +27,7 @@ bool UArcGISRestProvider::QueryFeatures(const FGeoRect& Bounds, TArray<FGISFeatu
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("ArcGISRestProvider: Queried %d total features"), OutFeatures.Num());
+    UE_LOG(LogGIS, Log, TEXT("ArcGISRestProvider: Queried %d total features"), OutFeatures.Num());
     return bSuccess;
 }
 
@@ -48,10 +49,10 @@ bool UArcGISRestProvider::QuerySingleLayer(
         FString Response;
         if (!HttpGetSync(QueryUrl, Response))
         {
-            UE_LOG(LogTemp, Error, TEXT("ArcGISRestProvider: HTTP request failed for %s"), *LayerUrl);
+            UE_LOG(LogGIS, Error, TEXT("ArcGISRestProvider: HTTP request failed for %s"), *LayerUrl);
             if (ResultOffset > 0)
             {
-                UE_LOG(LogTemp, Warning, TEXT("ArcGISRestProvider: Returning partial data (%d features fetched before failure)"), ResultOffset);
+                UE_LOG(LogGIS, Warning, TEXT("ArcGISRestProvider: Returning partial data (%d features fetched before failure)"), ResultOffset);
             }
             return ResultOffset > 0;
         }
@@ -60,10 +61,10 @@ bool UArcGISRestProvider::QuerySingleLayer(
         TArray<FGISFeature> PageFeatures;
         if (!Parser->ParseString(Response, PageFeatures))
         {
-            UE_LOG(LogTemp, Error, TEXT("ArcGISRestProvider: Failed to parse GeoJSON response"));
+            UE_LOG(LogGIS, Error, TEXT("ArcGISRestProvider: Failed to parse GeoJSON response"));
             if (ResultOffset > 0)
             {
-                UE_LOG(LogTemp, Warning, TEXT("ArcGISRestProvider: Returning partial data (%d features fetched before parse failure)"), ResultOffset);
+                UE_LOG(LogGIS, Warning, TEXT("ArcGISRestProvider: Returning partial data (%d features fetched before parse failure)"), ResultOffset);
             }
             return ResultOffset > 0;
         }
@@ -74,7 +75,7 @@ bool UArcGISRestProvider::QuerySingleLayer(
         if (PageFeatures.Num() >= MaxRecordCount)
         {
             ResultOffset += PageFeatures.Num();
-            UE_LOG(LogTemp, Log, TEXT("ArcGISRestProvider: Page %d features, fetching more (offset=%d)"),
+            UE_LOG(LogGIS, Log, TEXT("ArcGISRestProvider: Page %d features, fetching more (offset=%d)"),
                 PageFeatures.Num(), ResultOffset);
         }
         else

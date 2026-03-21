@@ -1,6 +1,7 @@
 // PCGGISNode.cpp - 自定义 PCG 节点实现
 // 从 DataAsset 读取 Polygon → 网格采样 → 输出 PCG 点
 #include "PCG/PCGGISNode.h"
+#include "GISProceduralModule.h"
 #include "PCG/PCGLandUseData.h"
 #include "Data/LandUseMapDataAsset.h"
 #include "PCGContext.h"
@@ -77,13 +78,19 @@ bool FPCGGISLandUseSamplerElement::ExecuteInternal(FPCGContext* Context) const
         return true;
     }
 
+    UE_LOG(LogGIS, Log, TEXT("PCGGISLandUseSampler: ===== Execute START ====="));
+    const double StartTime = FPlatformTime::Seconds();
+
     // 加载 DataAsset
     ULandUseMapDataAsset* DataAsset = Settings->LandUseDataAsset.LoadSynchronous();
     if (!DataAsset || DataAsset->Polygons.Num() == 0)
     {
-        UE_LOG(LogTemp, Warning, TEXT("PCGGISLandUseSampler: No DataAsset or empty polygons"));
+        UE_LOG(LogGIS, Warning, TEXT("PCGGISLandUseSampler: No DataAsset or empty polygons"));
         return true;
     }
+
+    UE_LOG(LogGIS, Verbose, TEXT("PCGGISLandUseSampler: DataAsset '%s' loaded → %d polygons"),
+        *DataAsset->GetName(), DataAsset->Polygons.Num());
 
     // 确保空间索引已建立（首次访问时自动构建）
     if (!DataAsset->HasSpatialIndex() && DataAsset->Polygons.Num() > 100)
@@ -109,7 +116,7 @@ bool FPCGGISLandUseSamplerElement::ExecuteInternal(FPCGContext* Context) const
         TileFilteredPolygons = DataAsset->GetPolygonsInWorldBounds(LoadBounds);
         PolygonsToSample = &TileFilteredPolygons;
 
-        UE_LOG(LogTemp, Verbose, TEXT("PCGGISLandUseSampler: Tiling enabled, sampling %d/%d polygons in load radius"),
+        UE_LOG(LogGIS, Verbose, TEXT("PCGGISLandUseSampler: Tiling enabled, sampling %d/%d polygons in load radius"),
             TileFilteredPolygons.Num(), DataAsset->Polygons.Num());
     }
 
@@ -190,8 +197,10 @@ bool FPCGGISLandUseSamplerElement::ExecuteInternal(FPCGContext* Context) const
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("PCGGISLandUseSampler: Generated %d sample points from %d polygons (total in asset: %d)"),
-        OutputPoints.Num(), PolygonsToSample->Num(), DataAsset->Polygons.Num());
+    UE_LOG(LogGIS, Log, TEXT("PCGGISLandUseSampler: Generated %d sample points from %d polygons (total in asset: %d, %.3fs)"),
+        OutputPoints.Num(), PolygonsToSample->Num(), DataAsset->Polygons.Num(),
+        FPlatformTime::Seconds() - StartTime);
+    UE_LOG(LogGIS, Log, TEXT("PCGGISLandUseSampler: ===== Execute END ====="));
 
     // 输出到 PCG Graph
     TArray<FPCGTaggedData>& Outputs = Context->OutputData.TaggedData;

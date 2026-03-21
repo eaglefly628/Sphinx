@@ -1,0 +1,116 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "building": "commercial",
+        "name": "东方明珠",
+        "height": "468",
+        "sphinx_feature_id": 0
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.4955, 31.2397],
+          [121.4958, 31.2397],
+          [121.4958, 31.2400],
+          [121.4955, 31.2400],
+          [121.4955, 31.2397]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "building": "commercial",
+        "name": "上海中心大厦",
+        "height": "632",
+        "sphinx_feature_id": 1
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.4990, 31.2355],
+          [121.4995, 31.2355],
+          [121.4995, 31.2360],
+          [121.4990, 31.2360],
+          [121.4990, 31.2355]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "building": "commercial",
+        "name": "环球金融中心",
+        "height": "492",
+        "sphinx_feature_id": 2
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.4985, 31.2362],
+          [121.4989, 31.2362],
+          [121.4989, 31.2366],
+          [121.4985, 31.2366],
+          [121.4985, 31.2362]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "building": "commercial",
+        "name": "金茂大厦",
+        "height": "421",
+        "sphinx_feature_id": 3
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.4980, 31.2370],
+          [121.4984, 31.2370],
+          [121.4984, 31.2374],
+          [121.4980, 31.2374],
+          [121.4980, 31.2370]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "highway": "primary",
+        "name": "世纪大道",
+        "sphinx_feature_id": 6,
+        "sphinx_clipped": true
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [121.4950, 31.2370],
+          [121.4970, 31.2368],
+          [121.4995, 31.2365],
+          [121.5000, 31.2362]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "highway": "tertiary",
+        "name": "银城中路",
+        "sphinx_feature_id": 8
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [121.4975, 31.2350],
+          [121.4975, 31.2370],
+          [121.4975, 31.2390],
+          [121.4975, 31.2400]
+        ]
+      }
+    }
+  ]
+}

@@ -1,19 +1,22 @@
 // TileManifest.cpp - tile_manifest.json 解析实现
 #include "Data/TileManifest.h"
+#include "GISProceduralModule.h"
 #include "Misc/FileHelper.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
 bool FTileManifest::LoadFromFile(const FString& FilePath, FTileManifest& OutManifest)
 {
+    UE_LOG(LogGIS, Log, TEXT("TileManifest: Loading from %s"), *FilePath);
+
     FString JsonString;
     if (!FFileHelper::LoadFileToString(JsonString, *FilePath))
     {
-        UE_LOG(LogTemp, Error, TEXT("TileManifest: Failed to load file: %s"), *FilePath);
+        UE_LOG(LogGIS, Error, TEXT("TileManifest: Failed to load file: %s"), *FilePath);
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("TileManifest: Loaded %d chars from %s"), JsonString.Len(), *FilePath);
+    UE_LOG(LogGIS, Verbose, TEXT("TileManifest: Read %d chars, parsing..."), JsonString.Len());
     return ParseFromJson(JsonString, OutManifest);
 }
 
@@ -24,7 +27,7 @@ bool FTileManifest::ParseFromJson(const FString& JsonString, FTileManifest& OutM
 
     if (!FJsonSerializer::Deserialize(Reader, RootObject) || !RootObject.IsValid())
     {
-        UE_LOG(LogTemp, Error, TEXT("TileManifest: Failed to parse JSON"));
+        UE_LOG(LogGIS, Error, TEXT("TileManifest: Failed to parse JSON"));
         return false;
     }
 
@@ -49,6 +52,8 @@ bool FTileManifest::ParseFromJson(const FString& JsonString, FTileManifest& OutM
             ZoneStr = ZoneStr.LeftChop(1);
         }
         OutManifest.UTMZone = FCString::Atoi(*ZoneStr);
+        UE_LOG(LogGIS, Verbose, TEXT("TileManifest: Projection=%s → UTM zone %d %s"),
+            *Projection, OutManifest.UTMZone, OutManifest.bNorthernHemisphere ? TEXT("N") : TEXT("S"));
     }
 
     OutManifest.OriginLongitude = RootObject->GetNumberField(TEXT("origin_lon"));
@@ -71,11 +76,12 @@ bool FTileManifest::ParseFromJson(const FString& JsonString, FTileManifest& OutM
     const TArray<TSharedPtr<FJsonValue>>* TilesArray = nullptr;
     if (!RootObject->TryGetArrayField(TEXT("tiles"), TilesArray))
     {
-        UE_LOG(LogTemp, Error, TEXT("TileManifest: No 'tiles' array in JSON"));
+        UE_LOG(LogGIS, Error, TEXT("TileManifest: No 'tiles' array in JSON"));
         return false;
     }
 
     OutManifest.Tiles.Reserve(TilesArray->Num());
+    int32 TotalFeatures = 0;
 
     for (const TSharedPtr<FJsonValue>& TileValue : *TilesArray)
     {
@@ -97,6 +103,8 @@ bool FTileManifest::ParseFromJson(const FString& JsonString, FTileManifest& OutM
             ? static_cast<int32>(TileObj->GetNumberField(TEXT("polygon_count")))
             : 0;
 
+        TotalFeatures += Entry.FeatureCount;
+
         // 地理范围
         const TSharedPtr<FJsonObject>* BoundsObj = nullptr;
         if (TileObj->TryGetObjectField(TEXT("bounds_geo"), BoundsObj))
@@ -110,9 +118,11 @@ bool FTileManifest::ParseFromJson(const FString& JsonString, FTileManifest& OutM
         OutManifest.Tiles.Add(MoveTemp(Entry));
     }
 
-    UE_LOG(LogTemp, Log, TEXT("TileManifest: Parsed %d tiles, grid %dx%d, origin (%.4f, %.4f)"),
+    UE_LOG(LogGIS, Log, TEXT("TileManifest: Parsed %d tiles (grid %dx%d, tile=%.0fm, origin=(%.4f,%.4f), total features=%d)"),
         OutManifest.Tiles.Num(), OutManifest.NumCols, OutManifest.NumRows,
-        OutManifest.OriginLongitude, OutManifest.OriginLatitude);
+        OutManifest.TileSizeM,
+        OutManifest.OriginLongitude, OutManifest.OriginLatitude,
+        TotalFeatures);
 
     return true;
 }
@@ -126,6 +136,7 @@ const FTileEntry* FTileManifest::FindTile(int32 Col, int32 Row) const
             return &Entry;
         }
     }
+    UE_LOG(LogGIS, Verbose, TEXT("TileManifest: FindTile(%d,%d) → not found"), Col, Row);
     return nullptr;
 }
 
@@ -146,5 +157,6 @@ TArray<const FTileEntry*> FTileManifest::FindTilesInBounds(const FGeoRect& Bound
         Result.Add(&Entry);
     }
 
+    UE_LOG(LogGIS, Verbose, TEXT("TileManifest: FindTilesInBounds → %d/%d tiles match"), Result.Num(), Tiles.Num());
     return Result;
 }
