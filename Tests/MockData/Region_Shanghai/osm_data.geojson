@@ -1,0 +1,269 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "building": "commercial",
+        "name": "东方明珠",
+        "height": "468",
+        "building:levels": "14"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.4955, 31.2397],
+          [121.4958, 31.2397],
+          [121.4958, 31.2400],
+          [121.4955, 31.2400],
+          [121.4955, 31.2397]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "building": "commercial",
+        "name": "上海中心大厦",
+        "height": "632",
+        "building:levels": "128"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.4990, 31.2355],
+          [121.4995, 31.2355],
+          [121.4995, 31.2360],
+          [121.4990, 31.2360],
+          [121.4990, 31.2355]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "building": "commercial",
+        "name": "环球金融中心",
+        "height": "492",
+        "building:levels": "101"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.4985, 31.2362],
+          [121.4989, 31.2362],
+          [121.4989, 31.2366],
+          [121.4985, 31.2366],
+          [121.4985, 31.2362]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "building": "commercial",
+        "name": "金茂大厦",
+        "height": "421",
+        "building:levels": "88"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.4980, 31.2370],
+          [121.4984, 31.2370],
+          [121.4984, 31.2374],
+          [121.4980, 31.2374],
+          [121.4980, 31.2370]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "building": "residential",
+        "name": "滨江住宅A",
+        "height": "60",
+        "building:levels": "20"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.4920, 31.2380],
+          [121.4925, 31.2380],
+          [121.4925, 31.2384],
+          [121.4920, 31.2384],
+          [121.4920, 31.2380]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "building": "residential",
+        "name": "滨江住宅B",
+        "height": "45",
+        "building:levels": "15"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.4928, 31.2380],
+          [121.4933, 31.2380],
+          [121.4933, 31.2384],
+          [121.4928, 31.2384],
+          [121.4928, 31.2380]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "highway": "primary",
+        "name": "世纪大道",
+        "lanes": "6"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [121.4920, 31.2370],
+          [121.4945, 31.2370],
+          [121.4970, 31.2368],
+          [121.4995, 31.2365],
+          [121.5000, 31.2362]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "highway": "secondary",
+        "name": "陆家嘴环路",
+        "lanes": "4"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [121.4940, 31.2350],
+          [121.4950, 31.2360],
+          [121.4960, 31.2380],
+          [121.4970, 31.2400],
+          [121.4960, 31.2420],
+          [121.4940, 31.2430],
+          [121.4920, 31.2420],
+          [121.4910, 31.2400],
+          [121.4920, 31.2380],
+          [121.4930, 31.2360],
+          [121.4940, 31.2350]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "highway": "tertiary",
+        "name": "银城中路"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [121.4975, 31.2350],
+          [121.4975, 31.2370],
+          [121.4975, 31.2390],
+          [121.4975, 31.2410]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "highway": "tertiary",
+        "name": "花园石桥路"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [121.4910, 31.2390],
+          [121.4930, 31.2390],
+          [121.4950, 31.2390],
+          [121.4970, 31.2390],
+          [121.4990, 31.2390]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "natural": "water",
+        "name": "黄浦江",
+        "water": "river"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.4900, 31.2350],
+          [121.4908, 31.2350],
+          [121.4910, 31.2370],
+          [121.4912, 31.2390],
+          [121.4910, 31.2410],
+          [121.4908, 31.2430],
+          [121.4905, 31.2450],
+          [121.4900, 31.2450],
+          [121.4900, 31.2350]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "leisure": "park",
+        "name": "陆家嘴中心绿地"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.4945, 31.2395],
+          [121.4960, 31.2395],
+          [121.4965, 31.2405],
+          [121.4960, 31.2415],
+          [121.4945, 31.2415],
+          [121.4940, 31.2405],
+          [121.4945, 31.2395]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "leisure": "park",
+        "name": "滨江公园"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.4912, 31.2410],
+          [121.4920, 31.2410],
+          [121.4920, 31.2430],
+          [121.4912, 31.2430],
+          [121.4912, 31.2410]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "landuse": "farmland",
+        "name": "测试农田"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.4980, 31.2420],
+          [121.5000, 31.2420],
+          [121.5000, 31.2445],
+          [121.4980, 31.2445],
+          [121.4980, 31.2420]
+        ]]
+      }
+    }
+  ]
+}

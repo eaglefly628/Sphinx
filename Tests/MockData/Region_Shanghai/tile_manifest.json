@@ -1,0 +1,89 @@
+{
+  "version": "1.0",
+  "projection": "UTM51N (EPSG:32651)",
+  "epsg": 32651,
+  "origin_lon": 121.495,
+  "origin_lat": 31.240,
+  "tile_size_m": 500,
+  "num_cols": 2,
+  "num_rows": 2,
+  "total_features": 14,
+  "tiles": [
+    {
+      "col": 0,
+      "row": 0,
+      "geojson": "tiles/tile_0_0/osm.geojson",
+      "landcover": "tiles/tile_0_0/landcover.json",
+      "polygon_count": 5,
+      "bounds_geo": {
+        "min_lon": 121.4900,
+        "min_lat": 31.2350,
+        "max_lon": 121.4950,
+        "max_lat": 31.2400
+      },
+      "bounds_world": {
+        "min_x": -500.0,
+        "min_y": -500.0,
+        "max_x": 0.0,
+        "max_y": 0.0
+      }
+    },
+    {
+      "col": 1,
+      "row": 0,
+      "geojson": "tiles/tile_1_0/osm.geojson",
+      "landcover": "tiles/tile_1_0/landcover.json",
+      "polygon_count": 6,
+      "bounds_geo": {
+        "min_lon": 121.4950,
+        "min_lat": 31.2350,
+        "max_lon": 121.5000,
+        "max_lat": 31.2400
+      },
+      "bounds_world": {
+        "min_x": 0.0,
+        "min_y": -500.0,
+        "max_x": 500.0,
+        "max_y": 0.0
+      }
+    },
+    {
+      "col": 0,
+      "row": 1,
+      "geojson": "tiles/tile_0_1/osm.geojson",
+      "landcover": "tiles/tile_0_1/landcover.json",
+      "polygon_count": 3,
+      "bounds_geo": {
+        "min_lon": 121.4900,
+        "min_lat": 31.2400,
+        "max_lon": 121.4950,
+        "max_lat": 31.2450
+      },
+      "bounds_world": {
+        "min_x": -500.0,
+        "min_y": 0.0,
+        "max_x": 0.0,
+        "max_y": 500.0
+      }
+    },
+    {
+      "col": 1,
+      "row": 1,
+      "geojson": "tiles/tile_1_1/osm.geojson",
+      "landcover": "tiles/tile_1_1/landcover.json",
+      "polygon_count": 3,
+      "bounds_geo": {
+        "min_lon": 121.4950,
+        "min_lat": 31.2400,
+        "max_lon": 121.5000,
+        "max_lat": 31.2450
+      },
+      "bounds_world": {
+        "min_x": 0.0,
+        "min_y": 0.0,
+        "max_x": 500.0,
+        "max_y": 500.0
+      }
+    }
+  ]
+}

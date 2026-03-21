@@ -1,0 +1,99 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "natural": "water",
+        "name": "黄浦江",
+        "water": "river",
+        "sphinx_feature_id": 10,
+        "sphinx_clipped": true
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.4900, 31.2350],
+          [121.4908, 31.2350],
+          [121.4910, 31.2370],
+          [121.4912, 31.2390],
+          [121.4910, 31.2400],
+          [121.4900, 31.2400],
+          [121.4900, 31.2350]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "building": "residential",
+        "name": "滨江住宅A",
+        "height": "60",
+        "sphinx_feature_id": 4
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.4920, 31.2380],
+          [121.4925, 31.2380],
+          [121.4925, 31.2384],
+          [121.4920, 31.2384],
+          [121.4920, 31.2380]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "building": "residential",
+        "name": "滨江住宅B",
+        "height": "45",
+        "sphinx_feature_id": 5
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.4928, 31.2380],
+          [121.4933, 31.2380],
+          [121.4933, 31.2384],
+          [121.4928, 31.2384],
+          [121.4928, 31.2380]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "highway": "secondary",
+        "name": "陆家嘴环路",
+        "sphinx_feature_id": 7,
+        "sphinx_clipped": true
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [121.4940, 31.2350],
+          [121.4950, 31.2360],
+          [121.4950, 31.2400]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "highway": "tertiary",
+        "name": "花园石桥路",
+        "sphinx_feature_id": 9,
+        "sphinx_clipped": true
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [121.4910, 31.2390],
+          [121.4930, 31.2390],
+          [121.4950, 31.2390]
+        ]
+      }
+    }
+  ]
+}
