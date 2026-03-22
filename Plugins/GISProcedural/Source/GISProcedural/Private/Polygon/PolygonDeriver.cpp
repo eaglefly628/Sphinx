@@ -7,6 +7,7 @@
 #include "Data/GISCoordinate.h"
 #include "DEM/DEMParser.h"
 #include "DEM/TerrainAnalyzer.h"
+#include "Runtime/CesiumBridgeComponent.h"
 #include "Async/Async.h"
 
 // ============ DataProvider 模式 ============
@@ -42,7 +43,8 @@ TArray<FLandUsePolygon> UPolygonDeriver::GenerateFromProvider(
         return Result;
     }
 
-    // Step 2: 尝试从 DataProvider 获取高程数据做地形分区
+    // Step 2: 尝试获取高程数据做地形分区
+    // 优先级：CesiumBridge 离线 DEM 缓存 > DataProvider::QueryElevation
     UE_LOG(LogGIS, Verbose, TEXT("PolygonDeriver: Step 2/4 → Querying elevation data..."));
     bool bHasTerrain = false;
     FGeoRect EffectiveBounds = QueryBounds.IsValid() ? QueryBounds : InferBoundsFromFeatures();
@@ -51,7 +53,26 @@ TArray<FLandUsePolygon> UPolygonDeriver::GenerateFromProvider(
     {
         TArray<float> ElevGrid;
         int32 GridW = 0, GridH = 0;
-        if (DataProvider->QueryElevation(EffectiveBounds, TerrainAnalysisResolution, ElevGrid, GridW, GridH))
+
+        // 优先：从 CesiumBridge 离线 DEM 缓存获取（O(1) 查表，无 Line Trace）
+        bool bElevFromCesium = false;
+        if (CesiumBridge.IsValid())
+        {
+            bElevFromCesium = CesiumBridge->BuildElevationGrid(
+                EffectiveBounds, TerrainAnalysisResolution, ElevGrid, GridW, GridH);
+            if (bElevFromCesium)
+            {
+                UE_LOG(LogGIS, Log, TEXT("PolygonDeriver: Elevation from CesiumBridge DEM cache (%dx%d)"), GridW, GridH);
+            }
+        }
+
+        // 回退：从 DataProvider 获取（LocalFile/ArcGIS 等）
+        if (!bElevFromCesium)
+        {
+            bElevFromCesium = DataProvider->QueryElevation(EffectiveBounds, TerrainAnalysisResolution, ElevGrid, GridW, GridH);
+        }
+
+        if (bElevFromCesium)
         {
             // 有高程数据 → 走完整的 DEM 分析 + 矢量切割流程
             if (!TerrainAnalyzerInstance)
@@ -127,6 +148,11 @@ TArray<FLandUsePolygon> UPolygonDeriver::GenerateFromVectorsOnly(double OriginLo
 
     UGISCoordinate* Coord = NewObject<UGISCoordinate>();
     Coord->SetOrigin(OriginLon, OriginLat);
+    if (CesiumBridge.IsValid())
+    {
+        Coord->SetCoordinateMode(EGISCoordinateMode::Cesium);
+        Coord->SetCesiumBridge(CesiumBridge.Get());
+    }
 
     // 无 DEM 地形分区时，从矢量面域（WaterBody, LandUse, Building, Natural）直接创建 Polygon
     for (const FGISFeature& Feature : AllFeatures)
@@ -418,6 +444,11 @@ TArray<FLandUsePolygon> UPolygonDeriver::CutZonesWithVectors(double OriginLon, d
 
     UGISCoordinate* Coord = NewObject<UGISCoordinate>();
     Coord->SetOrigin(OriginLon, OriginLat);
+    if (CesiumBridge.IsValid())
+    {
+        Coord->SetCoordinateMode(EGISCoordinateMode::Cesium);
+        Coord->SetCesiumBridge(CesiumBridge.Get());
+    }
 
     // 收集所有切割线（道路 + 河流 + 海岸线）→ 世界坐标
     TArray<TArray<FVector>> CutLines;

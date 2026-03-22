@@ -1,5 +1,6 @@
 // GISCoordinate.cpp - 坐标转换实现
 #include "Data/GISCoordinate.h"
+#include "Runtime/CesiumBridgeComponent.h"
 
 void UGISCoordinate::SetOrigin(double OriginLon, double OriginLat)
 {
@@ -14,6 +15,13 @@ void UGISCoordinate::SetOrigin(double OriginLon, double OriginLat)
 
 FVector UGISCoordinate::GeoToWorld(double Lon, double Lat) const
 {
+    // Cesium 模式：委托 CesiumBridge 做坐标转换
+    if (CoordMode == EGISCoordinateMode::Cesium && CesiumBridge.IsValid())
+    {
+        return CesiumBridge->LLHToUnreal(Lon, Lat, 0.0);
+    }
+
+    // SimpleMercator 模式（默认）
     const double DeltaLon = Lon - OriginLongitude;
     const double DeltaLat = Lat - OriginLatitude;
 
@@ -26,6 +34,12 @@ FVector UGISCoordinate::GeoToWorld(double Lon, double Lat) const
 
 FVector2D UGISCoordinate::WorldToGeo(const FVector& WorldPos) const
 {
+    // Cesium 模式：委托 CesiumBridge
+    if (CoordMode == EGISCoordinateMode::Cesium && CesiumBridge.IsValid())
+    {
+        return CesiumBridge->UnrealToLLH(WorldPos);
+    }
+
     if (MetersPerDegreeLon == 0.0 || MetersPerDegreeLat == 0.0)
     {
         return FVector2D(OriginLongitude, OriginLatitude);

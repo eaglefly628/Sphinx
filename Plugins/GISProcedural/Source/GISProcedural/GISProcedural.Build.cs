@@ -1,5 +1,6 @@
 // GISProcedural.Build.cs
 using UnrealBuildTool;
+using System.IO;
 
 public class GISProcedural : ModuleRules
 {
@@ -26,8 +27,18 @@ public class GISProcedural : ModuleRules
             "HTTP",                // ArcGIS REST API 调用
         });
 
-        // 不依赖 ArcGIS SDK — 保持插件独立性
-        // ArcGIS 的坐标转换在项目层面做，不在插件里
-        // ArcGIS 数据通过 REST API (HTTP) 获取 GeoJSON，不依赖 SDK
+        // Cesium 软依赖：仅在 CesiumRuntime 模块存在时启用
+        bool bHasCesium = Directory.Exists(Path.Combine(PluginsDirectory, "CesiumForUnreal")) ||
+                          Directory.Exists(Path.Combine(EngineDirectory, "Plugins", "Marketplace", "CesiumForUnreal"));
+
+        if (bHasCesium)
+        {
+            PrivateDependencyModuleNames.Add("CesiumRuntime");
+            PublicDefinitions.Add("WITH_CESIUM=1");
+        }
+        else
+        {
+            PublicDefinitions.Add("WITH_CESIUM=0");
+        }
     }
 }

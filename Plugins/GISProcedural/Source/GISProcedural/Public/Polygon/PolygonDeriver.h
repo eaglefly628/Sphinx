@@ -10,6 +10,7 @@
 #include "DEM/DEMTypes.h"
 #include "PolygonDeriver.generated.h"
 
+class UCesiumBridgeComponent;
 class ULandUseClassifyRules;
 class UDEMParser;
 class UTerrainAnalyzer;
@@ -155,6 +156,10 @@ public:
     /** 分类规则配置（UPROPERTY 确保 GC 追踪） */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GISProcedural|Config")
     TObjectPtr<ULandUseClassifyRules> ClassifyRules = nullptr;
+
+    /** Cesium 桥接组件（可选，用于离线 DEM 高程缓存） */
+    UPROPERTY()
+    TWeakObjectPtr<UCesiumBridgeComponent> CesiumBridge;
 
     // ======== 调试输出 ========
 

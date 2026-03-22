@@ -1,10 +1,12 @@
 // GISWorldBuilder.cpp - 世界构建器实现
 #include "Runtime/GISWorldBuilder.h"
+#include "Runtime/CesiumBridgeComponent.h"
 #include "GISProceduralModule.h"
 #include "Components/GISPolygonComponent.h"
 #include "Data/LocalFileProvider.h"
 #include "Data/ArcGISRestProvider.h"
 #include "Data/TiledFileProvider.h"
+#include "Data/GISCoordinate.h"
 #include "Data/LandUseMapDataAsset.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
@@ -112,6 +114,70 @@ IGISDataProvider* AGISWorldBuilder::CreateDataProvider()
                     return nullptr;
                 }
             }
+
+            return static_cast<IGISDataProvider*>(TiledProvider);
+        }
+
+        case EGISDataSourceType::CesiumTiled:
+        {
+            // Cesium 地形 + 本地 GeoJSON：
+            // 矢量数据仍走 TiledFileProvider，高程来自离线 DEM 缓存
+            if (!TiledFileProviderInstance)
+            {
+                TiledFileProviderInstance = NewObject<UTiledFileProvider>(this);
+            }
+
+            UTiledFileProvider* TiledProvider = CastChecked<UTiledFileProvider>(TiledFileProviderInstance);
+            TiledProvider->ManifestPath = FPaths::Combine(
+                FPaths::ProjectContentDir(), TileManifestPath);
+
+            if (!TiledProvider->IsInitialized())
+            {
+                UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: CesiumTiled → initializing TiledFileProvider"));
+                if (!TiledProvider->Initialize())
+                {
+                    UE_LOG(LogGIS, Error, TEXT("GISWorldBuilder: CesiumTiled → TiledFileProvider init failed"));
+                    return nullptr;
+                }
+            }
+
+            // 创建 CesiumBridge 组件
+            if (!CesiumBridgeInstance)
+            {
+                CesiumBridgeInstance = NewObject<UCesiumBridgeComponent>(this);
+                CesiumBridgeInstance->RegisterComponent();
+            }
+            CesiumBridgeInstance->CesiumGeoreferenceActor = CesiumGeoreferenceActor;
+            CesiumBridgeInstance->OriginLongitude = OriginLongitude;
+            CesiumBridgeInstance->OriginLatitude = OriginLatitude;
+            CesiumBridgeInstance->UpdateCachedProjection();
+
+            // 加载离线 DEM 高程缓存
+            const FString FullDEMCacheDir = FPaths::Combine(FPaths::ProjectContentDir(), DEMCacheDirectory);
+            TArray<FString> CacheFiles;
+            IFileManager::Get().FindFiles(CacheFiles, *FullDEMCacheDir, TEXT("*.bin"));
+            for (const FString& FileName : CacheFiles)
+            {
+                // 文件名格式: elevation_X_Y.bin → tile coord (X, Y)
+                FString BaseName = FPaths::GetBaseFilename(FileName);
+                TArray<FString> Parts;
+                BaseName.ParseIntoArray(Parts, TEXT("_"));
+                if (Parts.Num() >= 3)
+                {
+                    const int32 TileX = FCString::Atoi(*Parts[Parts.Num() - 2]);
+                    const int32 TileY = FCString::Atoi(*Parts[Parts.Num() - 1]);
+                    CesiumBridgeInstance->LoadDEMCache(
+                        FPaths::Combine(FullDEMCacheDir, FileName),
+                        FIntPoint(TileX, TileY));
+                }
+            }
+
+            // 注入到 PolygonDeriver
+            PolygonDeriver->CesiumBridge = CesiumBridgeInstance;
+
+            UE_LOG(LogGIS, Log, TEXT("GISWorldBuilder: CesiumTiled → ready (bridge=%s, DEM tiles=%d)"),
+                CesiumGeoreferenceActor.IsNull() ? TEXT("Mercator fallback") : TEXT("Cesium"),
+                CesiumBridgeInstance->GetCachedTileCount());
 
             return static_cast<IGISDataProvider*>(TiledProvider);
         }
@@ -242,6 +308,12 @@ void AGISWorldBuilder::ClearGenerated()
     }
     SpawnedActors.Empty();
     GeneratedPolygons.Empty();
+
+    // 清理 CesiumBridge DEM 缓存以释放内存
+    if (CesiumBridgeInstance)
+    {
+        CesiumBridgeInstance->ClearDEMCache();
+    }
 
     if (UWorld* World = GetWorld())
     {
@@ -456,6 +528,10 @@ void AGISWorldBuilder::GenerateAndSaveDataAsset()
     else if (DataSourceType == EGISDataSourceType::TiledFile)
     {
         DataAsset->SourceProvider = FString::Printf(TEXT("TiledFile: %s"), *TileManifestPath);
+    }
+    else if (DataSourceType == EGISDataSourceType::CesiumTiled)
+    {
+        DataAsset->SourceProvider = FString::Printf(TEXT("CesiumTiled: %s"), *TileManifestPath);
     }
 
     // 自动构建空间索引以加速运行时查询

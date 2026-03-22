@@ -4,10 +4,24 @@
 #include "CoreMinimal.h"
 #include "GISCoordinate.generated.h"
 
+class UCesiumBridgeComponent;
+
+/** 坐标模式 */
+UENUM(BlueprintType)
+enum class EGISCoordinateMode : uint8
+{
+	/** 简化 Mercator（默认，原有行为） */
+	SimpleMercator  UMETA(DisplayName = "Simple Mercator"),
+	/** UTM 投影 */
+	UTM             UMETA(DisplayName = "UTM"),
+	/** Cesium（委托 CesiumBridge 做 ECEF 变换） */
+	Cesium          UMETA(DisplayName = "Cesium"),
+};
+
 /**
  * GIS 坐标转换工具类
  * 负责经纬度 ↔ UE5 世界坐标的相互转换
- * 使用简化的 Mercator 投影，以指定原点为中心
+ * 支持多种投影模式：SimpleMercator / UTM / Cesium
  */
 UCLASS(BlueprintType)
 class GISPROCEDURAL_API UGISCoordinate : public UObject
@@ -76,6 +90,25 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "GISProcedural|Coordinate")
     static bool UTMToGeo(int32 ZoneNumber, double Easting, double Northing, bool bNorthernHemisphere, double& OutLon, double& OutLat);
+
+    /** 设置坐标模式 */
+    UFUNCTION(BlueprintCallable, Category = "GISProcedural|Coordinate")
+    void SetCoordinateMode(EGISCoordinateMode Mode) { CoordMode = Mode; }
+
+    /** 获取当前坐标模式 */
+    UFUNCTION(BlueprintPure, Category = "GISProcedural|Coordinate")
+    EGISCoordinateMode GetCoordinateMode() const { return CoordMode; }
+
+    /** 设置 Cesium 桥接组件（Cesium 模式下使用） */
+    void SetCesiumBridge(UCesiumBridgeComponent* Bridge) { CesiumBridge = Bridge; }
+
+private:
+    /** 当前坐标模式 */
+    EGISCoordinateMode CoordMode = EGISCoordinateMode::SimpleMercator;
+
+    /** Cesium 桥接组件（Cesium 模式下使用，弱引用） */
+    UPROPERTY()
+    TWeakObjectPtr<UCesiumBridgeComponent> CesiumBridge;
 
 private:
     /** 投影原点经度 */

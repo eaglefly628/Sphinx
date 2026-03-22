@@ -10,6 +10,7 @@
 #include "Data/TiledFileProvider.h"
 #include "GISWorldBuilder.generated.h"
 
+class UCesiumBridgeComponent;
 class UGISPolygonComponent;
 class ULandUseMapDataAsset;
 class ULocalFileProvider;
@@ -30,6 +31,9 @@ enum class EGISDataSourceType : uint8
 
     /** 预处理瓦片集（tile_manifest.json，支持大规模区域） */
     TiledFile     UMETA(DisplayName = "Tiled File"),
+
+    /** Cesium 地形 + 本地 GeoJSON/PCG（全球级别） */
+    CesiumTiled   UMETA(DisplayName = "Cesium + Tiled"),
 };
 
 /**
@@ -98,6 +102,18 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|DataSource|TiledFile",
         meta = (EditCondition = "DataSourceType == EGISDataSourceType::TiledFile"))
     FString TileManifestPath = TEXT("GISData/Region_01/tile_manifest.json");
+
+    // ---- CesiumTiled 模式 ----
+
+    /** Cesium Georeference Actor（CesiumTiled 模式下必填） */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|DataSource|Cesium",
+        meta = (EditCondition = "DataSourceType == EGISDataSourceType::CesiumTiled"))
+    TSoftObjectPtr<AActor> CesiumGeoreferenceActor;
+
+    /** DEM 高程缓存目录（CesiumTiled 模式，含预处理的 elevation_cache.bin） */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GIS|DataSource|Cesium",
+        meta = (EditCondition = "DataSourceType == EGISDataSourceType::CesiumTiled"))
+    FString DEMCacheDirectory = TEXT("GISData/Region_01/dem_cache/");
 
     // ---- DataAsset 模式 ----
 
@@ -215,6 +231,10 @@ private:
     /** TiledFile 数据源实例 */
     UPROPERTY()
     UTiledFileProvider* TiledFileProviderInstance = nullptr;
+
+    /** Cesium 桥接组件（CesiumTiled 模式下创建） */
+    UPROPERTY()
+    UCesiumBridgeComponent* CesiumBridgeInstance = nullptr;
 
     /** 已生成的子 Actor */
     UPROPERTY()
