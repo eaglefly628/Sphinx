@@ -6,15 +6,17 @@
 
 ## 项目概述
 
-Sphinx 将真实地理数据——OpenStreetMap 导出、DEM 高程瓦片、ArcGIS 要素服务——转化为土地分类多边形，驱动 UE5 的 PCG（程序化内容生成）框架自动填充地形上的建筑、植被、道路和水体。
+Sphinx 将真实地理数据——OpenStreetMap 导出、DEM 高程瓦片、ArcGIS 要素服务、Cesium 3D Tiles——转化为土地分类多边形，驱动 UE5 的 PCG（程序化内容生成）框架自动填充地形上的建筑、植被、道路和水体。
 
 ### 核心能力
 
-- **多源 GIS 数据接入** — 本地 GeoJSON/DEM 文件或在线 ArcGIS REST 查询
+- **多源 GIS 数据接入** — 本地 GeoJSON/DEM 文件、ArcGIS REST 查询或 Cesium 地形
+- **Cesium 集成** — 通过 Cesium for Unreal 实现全球级地形，离线 DEM 高程缓存（零运行时 Line Trace）
 - **地形分析** — DEM → 坡度坡向 → 地形分类 → 连通区域提取
 - **多边形推导** — 地形分区被道路/河流/海岸线矢量切割为土地利用多边形
 - **自动分类** — 9 条规则系统：住宅、商业、工业、森林、农田、水体、道路、开放空间、军事
 - **PCG 集成** — 自定义采样节点输出带密度/类型 metadata 的点集，驱动下游 Spawner
+- **PCG LOD 距离控制** — 三级采样密度（全细节/中等/低）联动相机距离
 - **离线→在线流水线** — 编辑器生成 → DataAsset 持久化 → 运行时 PCG 读取
 
 ## 架构总览
@@ -53,6 +55,25 @@ Python 预处理（PBF/DEM/WorldCover）
     TiledLandUseMapDataAsset（异步流式加载目录）
                 │
         PCG 采样器（瓦片感知，LoadRadius）
+
+模式 E：CesiumTiled（全球规模 + 3D 地球）
+─────────────────────────────────────────
+Python 预处理（SRTM → 高程缓存）
+        │
+        ├→ dem_cache/elevation_X_Y.bin   ← O(1) 双线性插值查表
+        ├→ tile_manifest.json            ← 矢量数据索引
+        └→ tiles/tile_X_Y.geojson        ← 本地 GeoJSON
+                │
+    CesiumBridgeComponent
+        ├→ LLH ↔ UE5 坐标桥接（Cesium ECEF 或 Mercator 回退）
+        ├→ 离线 DEM 高程缓存（替代运行时 Line Trace）
+        └→ PCG LOD 距离控制（全细节 10m / 中等 30m / 低 100m / 剔除）
+                │
+    TiledFileProvider（矢量数据）+ CesiumBridge（高程数据）
+                │
+    PolygonDeriver（高程优先级：DEM 缓存 > DataProvider）
+                │
+    Cesium 3D Tiles 地形渲染 + PCG 程序化内容
 ```
 
 ## 快速开始
@@ -84,6 +105,19 @@ Python 预处理（PBF/DEM/WorldCover）
 4. 在编辑器中使用 `ATiledWorldBuilder` 批量生成逐瓦片 DataAsset（含 LandCover 融合）
 5. 在 PCG 图表中引用 `UTiledLandUseMapDataAsset` 目录 — 瓦片自动流式加载
 
+### CesiumTiled 模式（全球规模 + 3D 地球）
+
+1. （可选）安装 [Cesium for Unreal](https://cesium.com/platform/cesium-for-unreal/) — 不装也能工作（自动回退 Mercator 模式）
+2. 生成离线 DEM 高程缓存：
+   ```bash
+   python Tools/GISPreprocess/srtm_to_terrain.py /path/to/N31E121.hgt -o Content/GISData/Region_01 --tile-size 1000 --grid-size 100
+   ```
+3. 设置 `DataSourceType = CesiumTiled`，配置 `TileManifestPath` 和 `DEMCacheDirectory`
+4. （如装了 Cesium）将 `CesiumGeoreferenceActor` 指向场景中的 CesiumGeoreference
+5. **Generate In Editor** → 地形感知的多边形 + Cesium 3D 地球渲染
+
+无需 Cesium ion 账号 — 所有数据完全自托管。完整配置指南见 [`docs/cesium-tiled-quickstart.md`](docs/cesium-tiled-quickstart.md)。
+
 ## 插件：GISProcedural
 
 | 模块 | 完成度 | 用途 |
@@ -97,10 +131,11 @@ Python 预处理（PBF/DEM/WorldCover）
 | LocalFileProvider | 100% | 本地 GeoJSON + DEM 读取，带缓存 |
 | ArcGISRestProvider | 100% | HTTP 查询、分页、多图层 |
 | PCGGISNode | 100% | 网格采样 + 点在多边形测试，支持瓦片流式配置 |
-| GISWorldBuilder | 100% | 四模式调度器（LocalFile/ArcGIS/DataAsset/TiledFile） |
+| GISWorldBuilder | 100% | 五模式调度器（LocalFile/ArcGIS/DataAsset/TiledFile/CesiumTiled） |
 | LandUseMapDataAsset | 100% | 持久化多边形存储，空间查询 |
-| GISCoordinate | 100% | 经纬度 ↔ UE5 世界坐标 + WGS84 ↔ UTM 投影 |
+| GISCoordinate | 100% | 经纬度 ↔ UE5 世界坐标 + WGS84 ↔ UTM + Cesium ECEF 模式 |
 | GISPolygonComponent | 100% | Actor 组件，调试可视化 |
+| **CesiumBridgeComponent** | 100% | LLH↔UE5 坐标桥接、离线 DEM 缓存、PCG LOD 距离控制 |
 | **TileManifest** | 100% | 瓦片清单 JSON 解析，地理范围查询 |
 | **LandCoverGrid** | 100% | ESA WorldCover 栅格类型，土地覆盖融合 |
 | **TiledFileProvider** | 100% | 瓦片化数据源，LRU 缓存，跨瓦片去重 |
@@ -112,7 +147,7 @@ Python 预处理（PBF/DEM/WorldCover）
 
 ## 扩展路线图（全球军事仿真）
 
-全部 4 阶段已完成。插件已从 ~10 km² 演示扩展到支持全球覆盖：
+全部 5 阶段已完成。插件已从 ~10 km² 演示扩展到支持全球覆盖：
 
 | 阶段 | 内容 | 状态 |
 |------|------|------|
@@ -120,8 +155,9 @@ Python 预处理（PBF/DEM/WorldCover）
 | **P1** 外部预处理 | Python/GDAL 管线：PBF→GeoJSON、DEM 切片、WorldCover | 完成 |
 | **P2** TiledFileProvider + 空间索引 | 瓦片清单解析、网格空间索引、LRU 缓存 | 完成 |
 | **P3** 瓦片 DataAsset + 流式加载 | 逐瓦片 DataAsset 生成、异步流式加载目录 | 完成 |
+| **P4** Cesium 集成 | CesiumBridge、离线 DEM 缓存、PCG LOD、CesiumTiled 模式 | 完成 |
 
-原始协作计划见 [`PLAN.md`](PLAN.md)。
+原始协作计划见 [`PLAN.md`](PLAN.md)，性能分析见 [`docs/cesium-integration-performance-analysis.md`](docs/cesium-integration-performance-analysis.md)。
 
 ## 开发流程
 
@@ -131,8 +167,9 @@ Python 预处理（PBF/DEM/WorldCover）
    OpenTopography / SRTM → DEM 瓦片
    ESA WorldCover → LandCover GeoTIFF（可选，10m 分辨率）
 
-2. 运行预处理管线（瓦片模式）
+2. 运行预处理管线（瓦片/Cesium 模式）
    python Tools/GISPreprocess/preprocess.py --input ./RawData --output Content/GISData/Region_01 --tile-size 1024
+   python Tools/GISPreprocess/srtm_to_terrain.py DEM.hgt -o Content/GISData/Region_01  # （仅 CesiumTiled）
 
 3. 编辑器：生成 & 预览
    拖入 AGISWorldBuilder → 设置 DataSourceType → GenerateInEditor → 目视检查
@@ -157,7 +194,8 @@ Python 预处理（PBF/DEM/WorldCover）
 - **数据格式**：GeoJSON、GeoTIFF、PNG 高度图（Mapbox Terrain RGB）、RAW (.r16/.r32)、SRTM HGT
 - **在线服务**：ArcGIS REST Feature Services
 - **预处理**：Python 3.10+、GDAL/OGR、osmium-tool（Phase 1+）
-- **投影**：WGS84 ↔ UTM（内置）、简化 Mercator 用于局部区域
+- **Cesium**：Cesium for Unreal（可选软依赖，WITH_CESIUM 条件编译）
+- **投影**：WGS84 ↔ UTM（内置）、简化 Mercator、Cesium ECEF
 - **语言**：C++（UE5 插件）、Python（外部预处理）
 
 ## 许可
