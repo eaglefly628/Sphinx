@@ -36,9 +36,27 @@ DataSourceType = TiledFile
 TileManifestPath = <ProjectDir>/Tests/MockData/Region_Shanghai/tile_manifest.json
 ```
 
+### Mode E: CesiumTiled
+```
+DataSourceType = CesiumTiled
+TileManifestPath = <ProjectDir>/Tests/MockData/Region_Shanghai/tile_manifest.json
+DEMCacheDirectory = <ProjectDir>/Tests/MockData/Region_Shanghai/dem_cache/
+OriginLongitude = 121.495
+OriginLatitude = 31.240
+```
+
+DEM 缓存可通过 `srtm_to_terrain.py` 生成：
+```bash
+python Tools/GISPreprocess/srtm_to_terrain.py /path/to/N31E121.hgt \
+    -o Tests/MockData/Region_Shanghai --tile-size 1000 --grid-size 100
+```
+
+不装 Cesium for Unreal 也可使用（自动回退 Mercator 坐标模式）。
+
 ## 数据说明
 
 - 坐标范围: 经度 121.49~121.50, 纬度 31.235~31.245 (陆家嘴约 1km²)
 - 包含: 建筑 (6栋), 道路 (4条), 水体 (黄浦江), 绿地 (2块), 农田 (1块)
 - DEM: 64x64 网格, 海拔 2~15m (模拟平坦河口地形)
 - LandCover: 10x10 网格, ESA WorldCover 编码
+- DEM 缓存: elevation_X_Y.bin 二进制文件（40B 头 + float 网格），由 srtm_to_terrain.py 生成

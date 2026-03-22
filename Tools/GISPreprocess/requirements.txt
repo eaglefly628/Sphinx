@@ -14,3 +14,6 @@
 
 # Optional: For advanced geometry operations
 # shapely>=2.0
+
+# Optional: numpy (for DEM elevation cache generation via srtm_to_terrain.py)
+# numpy>=1.24

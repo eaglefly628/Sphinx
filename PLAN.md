@@ -26,7 +26,7 @@
 
 ## 分阶段实施计划
 
-### Phase 0：接口契约 + 共享类型定义（第 1 周，双方共同）
+### Phase 0：接口契约 + 共享类型定义（第 1 周，双方共同） ✅ 已完成
 
 **目标**：定义数据格式和接口，双方各自开发前达成一致。
 
@@ -86,7 +86,7 @@ UPROPERTY(BlueprintReadWrite) FBox WorldBounds;  // 缓存的 AABB
 **5. GISCoordinate 投影模式枚举**
 ```cpp
 UENUM(BlueprintType)
-enum class EProjectionType : uint8 { SimpleMercator, UTM };
+enum class EProjectionType : uint8 { SimpleMercator, UTM, Cesium };
 ```
 
 #### 验证检查点
@@ -95,7 +95,7 @@ enum class EProjectionType : uint8 { SimpleMercator, UTM };
 
 ---
 
-### Phase 1：数据预处理 + 坐标升级（第 2-4 周，并行）
+### Phase 1：数据预处理 + 坐标升级（第 2-4 周，并行） ✅ 已完成
 
 #### 小城负责：Python 预处理管线
 
@@ -137,7 +137,7 @@ enum class EProjectionType : uint8 { SimpleMercator, UTM };
 
 ---
 
-### Phase 2：Tile 数据提供者 + 空间索引（第 5-7 周，并行）
+### Phase 2：Tile 数据提供者 + 空间索引（第 5-7 周，并行） ✅ 已完成
 
 #### 小城负责：新建 Tile 数据提供者（全部新文件）
 
@@ -188,7 +188,7 @@ private:
 
 ---
 
-### Phase 3：World Partition 集成 + 大规模验证（第 8-10 周，并行）
+### Phase 3：World Partition 集成 + 大规模验证（第 8-10 周，并行） ✅ 已完成
 
 #### 小城负责：World Partition 流式加载
 
@@ -279,3 +279,36 @@ class UTiledLandUseMapDataAsset : public UDataAsset
 | C3 | P2 完成 | TiledFileProvider 加载 25 tile，相邻 tile 多边形无缝对齐 |
 | C4 | P3 完成 | World Partition 流式加载 100 tile，PCG 跨 tile 无缝 |
 | C5 | 最终 | 全上海（~6000km²）端到端通过 |
+
+---
+
+### Phase 4：Cesium 集成 + 全球级渲染 ✅ 已完成
+
+**目标**：集成 Cesium for Unreal 实现全球级 3D 地球渲染，叠加 GIS PCG 内容。
+
+#### 产出物
+
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `GISProcedural.Build.cs` | 修改 | CesiumRuntime 软依赖 + WITH_CESIUM 编译宏 |
+| `CesiumBridgeComponent.h/.cpp` | **新建** | LLH↔UE5 坐标桥接、离线 DEM 高程缓存（FDEMTileCache）、PCG LOD 距离控制（EPCGDetailLevel） |
+| `GISCoordinate.h/.cpp` | 修改 | 新增 Cesium 投影模式（EProjectionType::Cesium） |
+| `GISWorldBuilder.h/.cpp` | 修改 | 新增 EGISDataSourceType::CesiumTiled 枚举值 |
+| `PolygonDeriver.h/.cpp` | 修改 | 高程优先级：DEM 缓存 → DataProvider → 回退 0 |
+| `srtm_to_terrain.py` | **新建** | SRTM/GeoTIFF → 二进制高程缓存（struct 格式：GridSize|CellSize|GeoBounds|float[] data） |
+
+#### 关键设计
+
+1. **Cesium 软依赖**：`WITH_CESIUM=0` 时编译为空壳，所有现有功能不受影响
+2. **离线 DEM 缓存**：替代运行时 Line Trace，O(1) 双线性插值查表（~5ns/次），每 tile 仅 40KB
+3. **PCG LOD**：3 级距离控制（Full ≤1km / Medium ≤3km / Low ≤7km / Culled >7km）
+4. **坐标桥接**：有 Cesium → ECEF 变换；无 Cesium → SimpleMercator 回退
+
+#### 验证
+
+- WITH_CESIUM=0 编译通过，现有功能不受影响
+- DEM 缓存二进制格式：40 字节头 + float 网格
+- 双线性插值精度与 numpy 参考值匹配
+- Mercator 往返精度 ~0.5cm @ 70km
+- PCG LOD 距离分类逻辑正确
+- 高程准确性（合成地形验证）

@@ -2,7 +2,7 @@
 
 **版本**: v1.0.19
 **引擎**: Unreal Engine 5
-**更新日期**: 2026-03-21
+**更新日期**: 2026-03-22
 **版本规则**: 主版本.次版本.提交序号（每次 git commit 自动递增）
 
 ---
@@ -15,10 +15,11 @@
 4. [模式 B：ArcGIS REST 在线数据](#4-模式-barcgis-rest-在线数据)
 5. [模式 C：已有 DataAsset 直接加载](#5-模式-c已有-dataasset-直接加载)
 6. [模式 D：瓦片化全球规模管线](#6-模式-d瓦片化全球规模管线)
-7. [PCG 图表集成](#7-pcg-图表集成)
-8. [调试与日志](#8-调试与日志)
-9. [常见问题](#9-常见问题)
-10. [附录：模块清单](#附录模块清单)
+7. [模式 E：CesiumTiled 全球规模 + 3D 地球](#7-模式-ecesiumtiled-全球规模--3d-地球)
+8. [PCG 图表集成](#8-pcg-图表集成)
+9. [调试与日志](#9-调试与日志)
+10. [常见问题](#10-常见问题)
+11. [附录：模块清单](#附录模块清单)
 
 ---
 
@@ -32,13 +33,15 @@
 | 编译器 | Visual Studio 2022 (Windows) 或 Xcode 14+ (Mac) |
 | C++ 标准 | C++17（UE5 默认） |
 
-### 1.2 可选项（瓦片模式才需要）
+### 1.2 可选项（瓦片模式 / CesiumTiled 模式需要）
 
 | 项目 | 用途 |
 |------|------|
 | Python 3.10+ | 运行预处理管线 |
 | GDAL/OGR (`pip install gdal`) | DEM 裁切、WorldCover 栅格解析 |
 | osmium-tool (`pip install osmium`) | PBF → GeoJSON 转换 |
+| numpy (`pip install numpy`) | DEM 高程缓存生成（srtm_to_terrain.py） |
+| Cesium for Unreal 2.x | 可选，3D 地球渲染（不装走 Mercator 回退） |
 
 安装 Python 依赖：
 
@@ -319,7 +322,108 @@ Content/GISData/Region_01/
 
 ---
 
-## 7. PCG 图表集成
+## 7. 模式 E：CesiumTiled 全球规模 + 3D 地球
+
+**适用场景**：全球级别渲染，需要 Cesium 3D Tiles 地形 + 本地 GeoJSON PCG 内容叠加。
+
+### 7.1 前置条件
+
+- 完成模式 D 的 Python 预处理（生成 tile_manifest.json + tiles/）
+- （可选）安装 [Cesium for Unreal](https://cesium.com/platform/cesium-for-unreal/) — 不装也能工作（自动回退 Mercator 模式，WITH_CESIUM=0）
+
+### 7.2 生成离线 DEM 高程缓存
+
+CesiumTiled 模式使用离线 DEM 缓存替代运行时 Line Trace，实现 O(1) 高程查询。
+
+```bash
+cd Tools/GISPreprocess/
+
+python srtm_to_terrain.py \
+    /path/to/N31E121.hgt \
+    -o ../../Content/GISData/Region_01 \
+    --tile-size 1000 \
+    --grid-size 100
+```
+
+**参数说明**：
+
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| 第一个参数 | SRTM HGT 或 GeoTIFF 文件 | `N31E121.hgt` |
+| `-o` | 输出目录 | `Content/GISData/Region_01` |
+| `--tile-size` | 瓦片大小（米），与 preprocess.py 一致 | `1000` |
+| `--grid-size` | 每瓦片高程网格分辨率 | `100`（即 100×100 点，10m 间距） |
+
+输出：
+
+```
+Content/GISData/Region_01/
+├── tile_manifest.json          ← 已有（模式 D 产出）
+├── tiles/                      ← 已有
+└── dem_cache/                  ← 新增
+    ├── dem_cache_index.json    ← 缓存索引
+    ├── elevation_0_0.bin       ← 二进制高程网格（40B 头 + float 数组）
+    ├── elevation_0_1.bin
+    └── ...
+```
+
+如无真实 DEM 数据，可跳过此步骤（系统降级为无地形模式）。
+
+### 7.3 UE5 编辑器配置
+
+1. 拖入 `AGISWorldBuilder` 到关卡
+2. 配置属性：
+
+| 属性 | 值 | 说明 |
+|------|-----|------|
+| `DataSourceType` | **CesiumTiled** | |
+| `TileManifestPath` | `GISData/Region_01/tile_manifest.json` | 相对于 Content |
+| `DEMCacheDirectory` | `GISData/Region_01/dem_cache/` | 高程缓存目录 |
+| `OriginLongitude` | `121.47` | 地图中心经度 |
+| `OriginLatitude` | `31.23` | 地图中心纬度 |
+
+3. （如装了 Cesium 插件）额外配置：
+   - 在场景中放置 `CesiumGeoreference`（设置 Origin 经纬度）
+   - 在场景中放置 `Cesium3DTileset`（选择 Cesium World Terrain 或自托管 URL）
+   - `GISWorldBuilder` 的 `CesiumGeoreferenceActor` 引用场景中的 CesiumGeoreference
+
+4. 点击 **Generate In Editor**
+
+### 7.4 期望日志
+
+```
+LogGIS: GISWorldBuilder: ===== GenerateAll START (mode=4) =====
+LogGIS: GISWorldBuilder: CesiumTiled → initializing TiledFileProvider
+LogGIS: TiledFileProvider: Loading manifest → .../tile_manifest.json
+LogGIS: CesiumBridge: Loaded DEM cache tile (0,0) → 100x100 grid, 10.0m cell
+LogGIS: GISWorldBuilder: CesiumTiled → ready (bridge=Cesium, DEM tiles=4)
+LogGIS: PolygonDeriver: Elevation from CesiumBridge DEM cache (33x33)
+LogGIS: PolygonDeriver: ===== GenerateFromProvider END → 47 polygons (0.234s) =====
+```
+
+### 7.5 没装 Cesium 的替代方案
+
+不装 Cesium for Unreal 也完全可以使用 CesiumTiled 模式：
+- 系统自动回退到 SimpleMercator 坐标模式
+- DEM 高程缓存仍正常工作（高程查询不依赖 Cesium）
+- 只是没有 3D 地球地形渲染，调试线框在 Z=0 平面显示
+
+### 7.6 PCG LOD 距离控制
+
+CesiumBridgeComponent 内置三级 LOD：
+
+| 距离 | 级别 | 采样间隔 | 说明 |
+|------|------|----------|------|
+| ≤1km | Full | 10m | 全细节 |
+| ≤3km | Medium | 30m | 中等密度 |
+| ≤7km | Low | 100m | 稀疏 |
+| >7km | Culled | — | 不采样 |
+
+与 Cesium 自身的 3D Tiles LOD 联动，避免渲染负担叠加。
+
+---
+
+## 8. PCG 图表集成
 
 ### 7.1 添加采样节点
 
@@ -378,7 +482,7 @@ GIS Land Use Sampler
 
 ---
 
-## 8. 调试与日志
+## 9. 调试与日志
 
 ### 8.1 日志过滤
 
@@ -436,7 +540,7 @@ PCGGISLandUseSampler: ===== Execute END =====
 
 ---
 
-## 9. 常见问题
+## 10. 常见问题
 
 ### Q1：点击 Generate 后没有多边形输出？
 
@@ -482,6 +586,21 @@ PCGGISLandUseSampler: ===== Execute END =====
 - 确保 `OriginLongitude/OriginLatitude` 设为地图**正中心**
 - 使用瓦片模式，每个瓦片独立定位
 
+### Q7：CesiumTiled 模式编译报错 `CesiumGeoreference.h not found`？
+
+**正常现象**。不装 Cesium for Unreal 时 `WITH_CESIUM=0`，所有 Cesium 头文件引用被条件编译跳过。如果仍报错：
+1. 确认 `GISProcedural.Build.cs` 中的 Cesium 检测逻辑正确
+2. 清理中间文件：删除 `Intermediate/` 和 `Binaries/` 后重新生成项目文件
+
+### Q8：CesiumTiled 模式下多边形高程为 0？
+
+**原因**：未生成 DEM 高程缓存，或缓存路径配置错误。
+
+**解决**：
+1. 运行 `srtm_to_terrain.py` 生成 `dem_cache/` 目录
+2. 确认 `DEMCacheDirectory` 路径正确（相对于 Content/）
+3. 检查日志中是否有 `CesiumBridge: Loaded DEM cache tile` 信息
+
 ---
 
 ## 附录：模块清单
@@ -497,9 +616,9 @@ PCGGISLandUseSampler: ===== Execute END =====
 | LocalFileProvider | 100% | 本地 GeoJSON + DEM 读取，带缓存 |
 | ArcGISRestProvider | 100% | HTTP 查询、分页、多图层 |
 | PCGGISNode | 100% | 网格采样 + 点在多边形测试，瓦片感知 |
-| GISWorldBuilder | 100% | 四模式调度器 |
+| GISWorldBuilder | 100% | 五模式调度器（LocalFile/ArcGIS/DataAsset/TiledFile/CesiumTiled） |
 | LandUseMapDataAsset | 100% | 持久化多边形存储 + 网格空间索引 + 异步瓦片加载 |
-| GISCoordinate | 100% | 经纬度 ↔ UE5 世界坐标 + WGS84 ↔ UTM 投影 |
+| GISCoordinate | 100% | 经纬度 ↔ UE5 世界坐标 + WGS84 ↔ UTM + Cesium ECEF 模式 |
 | GISPolygonComponent | 100% | Actor 组件，调试可视化 |
 | TileManifest | 100% | 瓦片清单 JSON 解析，地理范围查询 |
 | LandCoverGrid | 100% | ESA WorldCover 栅格类型 |
@@ -507,6 +626,7 @@ PCGGISLandUseSampler: ===== Execute END =====
 | RasterLandCoverParser | 100% | landcover.json 解析，多数投票区域查询 |
 | TiledLandUseMapDataAsset | 100% | 逐瓦片 DataAsset 目录，异步流式加载 |
 | TiledWorldBuilder | 100% | 编辑器批量工具：清单 → 逐瓦片 DataAsset |
+| CesiumBridgeComponent | 100% | LLH↔UE5 坐标桥接、离线 DEM 高程缓存、PCG LOD 距离控制 |
 
 ---
 
