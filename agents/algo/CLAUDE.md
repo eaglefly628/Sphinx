@@ -54,7 +54,7 @@ Plugins/GISProcedural/Source/GISProcedural/
 - TileCoord (FIntPoint), ID (int32)
 
 ## Branch
-All work on the designated feature branch. Do not push to master without lead approval.
+All work on branch `claude/claudeMainBranch-0zjsx`. Do not create new branches unless lead approves a major refactor.
 
 ## Communication
 - 读 runtime/SHARED.md 了解 GISWorldBuilder 调用方式变化

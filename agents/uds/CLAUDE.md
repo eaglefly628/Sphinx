@@ -61,7 +61,7 @@ Plugins/GISProcedural/Source/GISProcedural/
 - 近地轨道渲染（需要额外方案处理太空→大气层过渡）
 
 ## Branch
-All work on the designated feature branch. Do not push to master without lead approval.
+All work on branch `claude/claudeMainBranch-0zjsx`. Do not create new branches unless lead approves a major refactor.
 
 ## Communication
 - 读 runtime/SHARED.md 了解 CesiumBridge/PCG LOD 变化

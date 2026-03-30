@@ -63,7 +63,7 @@ Plugins/GISProcedural/Source/GISProcedural/
 - BuildSpatialIndex: 编辑器保存时自动构建
 
 ## Branch
-All work on the designated feature branch. Do not push to master without lead approval.
+All work on branch `claude/claudeMainBranch-0zjsx`. Do not create new branches unless lead approves a major refactor.
 
 ## Communication
 - 读 algo/SHARED.md 了解 PolygonDeriver/Classifier API 变化

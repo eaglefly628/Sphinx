@@ -138,6 +138,11 @@ agents/
     └── SHARED.md
 ```
 
+分支规则：
+- **所有 agent 统一在 `claude/claudeMainBranch-0zjsx` 分支上工作**
+- 除非有重大重构需要单独分支，否则不建新分支
+- 重大重构需先征得主程序员同意
+
 通信规则：
 - Agent 之间通过 SHARED.md 异步通信
 - API 变更必须同时通知下游 agent 的 SHARED.md
