@@ -1,3 +1,28 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
+
+# UE5 Generated
+Binaries/
+Build/
+DerivedDataCache/
+Intermediate/
+Saved/
+*.sln
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+
+# Plugin Binaries & Intermediate
+Plugins/*/Binaries/
+Plugins/*/Intermediate/
+
+# UDS plugin (user will add manually)
+# Plugins/UltraDynamicSky/
+
+# OS
+.DS_Store
+Thumbs.db
