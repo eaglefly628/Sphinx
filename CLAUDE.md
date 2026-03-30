@@ -2,6 +2,32 @@
 
 军事仿真用全球 GIS 程序化世界生成系统。UE5 C++ 插件 + Python 预处理管线。
 
+## Version
+
+**Current: v1.0.0** (Phase 0-4 complete)
+
+### Changelog
+| Version | Date | Summary |
+|---------|------|---------|
+| v1.0.0 | 2026-03-30 | Phase 0-4 全部完成：五模式数据源、瓦片流式、Cesium 集成、PCG、71+ 测试 |
+
+### Versioning Rules
+- Bump minor (v1.X.0) for features/API changes, patch (v1.X.Y) for bug fixes
+- 只有主程序员在此文件 bump 版本，agent 不能自行升版本
+- SHARED.md 每个更新段落必须打版本标签：`## [v1.X.Y] Feature Name`
+- Agent 之间互相引用用版本号："see algo SHARED.md [v1.1.0]"
+- **每次 push 必须包含 changelog 条目**，无例外
+
+### Agent Names (canonical)
+| Agent | Name | Domain |
+|-------|------|--------|
+| algo | 算法 | 多边形推导、地形分析、分类器、道路网络、DEM 解析 |
+| runtime | 运行时 | GISWorldBuilder 五模式、Cesium 桥接、PCG 节点、坐标转换 |
+| pipeline | 管线 | Python 预处理、数据提供者、瓦片系统、GeoJSON/Raster 解析 |
+| uds | 天气 | Ultra Dynamic Sky 集成、天气系统、云层/雾/雨雪、昼夜循环 |
+
+使用这些精确名字（algo / runtime / pipeline / uds），不许变体。
+
 ## 快速参考
 
 - **插件**: `Plugins/GISProcedural/` (UE5 C++, Runtime module)
@@ -49,17 +75,24 @@ python Tools/GISPreprocess/preprocess.py --input ./RawData --output ./Output \
 
 ## 关键文件
 
-| 文件 | 职责 |
-|------|------|
-| `GISWorldBuilder.h/.cpp` | 五模式入口，编辑器生成按钮 |
-| `PolygonDeriver.h/.cpp` | 核心算法：DEM→地形→矢量切割→分类→PCG参数 |
-| `GISCoordinate.h/.cpp` | 坐标转换（SimpleMercator/UTM/Cesium 三种模式） |
-| `CesiumBridgeComponent.h/.cpp` | Cesium 桥接、离线 DEM 缓存、PCG LOD |
-| `TiledFileProvider.h/.cpp` | 瓦片数据源、LRU 缓存、manifest 读取 |
-| `LandUseClassifier.h/.cpp` | 9 规则分类 + ESA WorldCover 融合 |
-| `IGISDataProvider.h` | 数据源抽象接口（QueryFeatures/Elevation/LandCover） |
-| `preprocess.py` | Python 预处理主入口 |
-| `srtm_to_terrain.py` | SRTM → 二进制 DEM 高程缓存 |
+| 文件 | 职责 | Owner |
+|------|------|-------|
+| `GISWorldBuilder.h/.cpp` | 五模式入口，编辑器生成按钮 | runtime |
+| `PolygonDeriver.h/.cpp` | 核心算法：DEM→地形→矢量切割→分类→PCG参数 | algo |
+| `GISCoordinate.h/.cpp` | 坐标转换（SimpleMercator/UTM/Cesium） | runtime |
+| `CesiumBridgeComponent.h/.cpp` | Cesium 桥接、离线 DEM 缓存、PCG LOD | runtime |
+| `TiledFileProvider.h/.cpp` | 瓦片数据源、LRU 缓存、manifest 读取 | pipeline |
+| `LandUseClassifier.h/.cpp` | 9 规则分类 + ESA WorldCover 融合 | algo |
+| `TerrainAnalyzer.h/.cpp` | 5 步地形分析流水线 | algo |
+| `RoadNetworkGraph.h/.cpp` | 平面图、交叉检测、边分割 | algo |
+| `DEMParser.h/.cpp` | 多格式 DEM 解析 | algo |
+| `PCGGISNode.h/.cpp` | PCG 采样节点、瓦片感知 | runtime |
+| `IGISDataProvider.h` | 数据源抽象接口 | pipeline |
+| `TileManifest.h/.cpp` | 瓦片清单解析 | pipeline |
+| `GeoJsonParser.h/.cpp` | GeoJSON 解析 | pipeline |
+| `RasterLandCoverParser.h/.cpp` | WorldCover 栅格解析 | pipeline |
+| `preprocess.py` | Python 预处理主入口 | pipeline |
+| `srtm_to_terrain.py` | SRTM → 二进制 DEM 高程缓存 | pipeline |
 
 ## 代码约定
 
@@ -73,25 +106,47 @@ python Tools/GISPreprocess/preprocess.py --input ./RawData --output ./Output \
 - 新文件遵循现有目录结构: Public/Data/, Public/Polygon/, Public/Runtime/, Public/PCG/
 - Python 预处理输出 WGS84 GeoJSON，投影由 UE 侧处理
 
-## 协作
+## Design Principles
 
-- **鹰飞**: 修改现有 C++ 文件（WorldBuilder, Coordinate, Classifier, PCG）
-- **小城**: 新建文件（TiledFileProvider, TileManifest, Python 工具）
-- 分工原则: 小城只创建新文件，鹰飞只修改现有文件 → 零合并冲突
-- 主分支: master
-- 开发分支命名: claude/<feature>-<id>
+- 接口优先：新数据源实现 IGISDataProvider，不改上层代码
+- 零 GDAL 运行时：UE5 插件永远不依赖 GDAL，所有栅格处理在 Python 预处理完成
+- 软依赖：WITH_CESIUM 条件编译，不装 Cesium 不影响任何现有功能
+- 向后兼容：新增模式/字段不破坏现有数据流
+- 精度边界：float32 在 70km 范围内精度 ~0.5cm，可接受
+
+### Edit tool discipline
+- 最小化替换范围，只选要改的行
+- 大块替换时逐行确认 old_string 的每行都在 new_string 里
+- 多次小编辑优于一次大编辑
+- 修改 .h 时确认对应 .cpp 的 include 和签名同步
+
+## 多 Agent 协作
+
+```
+agents/
+├── algo/
+│   ├── CLAUDE.md      ← 算法 agent 身份 + 专业知识
+│   └── SHARED.md      ← 算法 agent 的知识共享 + TODO + Changelog
+├── runtime/
+│   ├── CLAUDE.md
+│   └── SHARED.md
+├── pipeline/
+│   ├── CLAUDE.md
+│   └── SHARED.md
+└── uds/
+    ├── CLAUDE.md
+    └── SHARED.md
+```
+
+通信规则：
+- Agent 之间通过 SHARED.md 异步通信
+- API 变更必须同时通知下游 agent 的 SHARED.md
+- 跨域修改需先在对方 SHARED.md 提 TODO
+- peer review 发现的问题写到对方 SHARED.md TODO
 
 ## 当前状态
 
 Phase 0-4 全部完成 ✅
-- ✅ 五种数据源模式
-- ✅ 瓦片化流式加载 + World Partition
-- ✅ 空间索引 O(k) 查询
-- ✅ UTM + SimpleMercator + Cesium 坐标模式
-- ✅ Cesium 集成（软依赖, 离线 DEM 缓存）
-- ✅ PCG 集成（自定义采样节点, 瓦片感知）
-- ✅ Python 预处理管线（10 脚本）
-- ✅ 71+ 自动化测试
 
 待讨论/实现:
 - 立交桥/涵洞 PCG 生成（需 bridge/tunnel 标签提取 + LayerIndex 分离）
