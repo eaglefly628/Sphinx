@@ -1,0 +1,12 @@
+Plugins/UltraDynamicSky/**/*.uasset filter=lfs diff=lfs merge=lfs -text
+Plugins/UltraDynamicSky/**/*.umap filter=lfs diff=lfs merge=lfs -text
+Plugins/UltraDynamicSky/**/*.png filter=lfs diff=lfs merge=lfs -text
+Plugins/UltraDynamicSky/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+Plugins/UltraDynamicSky/**/*.jpeg filter=lfs diff=lfs merge=lfs -text
+Plugins/UltraDynamicSky/**/*.tga filter=lfs diff=lfs merge=lfs -text
+Plugins/UltraDynamicSky/**/*.hdr filter=lfs diff=lfs merge=lfs -text
+Plugins/UltraDynamicSky/**/*.exr filter=lfs diff=lfs merge=lfs -text
+Plugins/UltraDynamicSky/**/*.wav filter=lfs diff=lfs merge=lfs -text
+Plugins/UltraDynamicSky/**/*.mp3 filter=lfs diff=lfs merge=lfs -text
+Plugins/UltraDynamicSky/**/*.dll filter=lfs diff=lfs merge=lfs -text
+Plugins/UltraDynamicSky/**/*.so filter=lfs diff=lfs merge=lfs -text

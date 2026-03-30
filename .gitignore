@@ -19,8 +19,7 @@ Saved/
 Plugins/*/Binaries/
 Plugins/*/Intermediate/
 
-# UDS plugin (user-installed, large binary content)
-Plugins/UltraDynamicSky/
+# UDS large binaries handled by Git LFS (see .gitattributes)
 
 # OS
 .DS_Store
