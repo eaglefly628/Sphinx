@@ -19,6 +19,10 @@ Saved/
 Plugins/*/Binaries/
 Plugins/*/Intermediate/
 
+# Third-party plugins (cloned or installed locally, not tracked in git)
+Plugins/CesiumForUnreal/
+Plugins/UltraDynamicSky/
+
 # OS
 .DS_Store
 Thumbs.db
