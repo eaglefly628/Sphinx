@@ -32,8 +32,8 @@ Repository structure:
 - No `using namespace` in headers
 
 ## Branch
-- Development branch: `claude/integrate-ultradynamicsky-sphinx-MPibj`
-- Always push to this branch unless instructed otherwise
+- Default development branch: `claude/main`
+- Large refactors use feature branches, otherwise all work goes to `claude/main`
 
 ## Agents
 | Agent | Name | Scope |
