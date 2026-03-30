@@ -21,6 +21,11 @@ Plugins/*/Intermediate/
 
 # UDS large binaries handled by Git LFS (see .gitattributes)
 
+# IDE
+.vscode/
+.vs/
+*.code-workspace
+
 # OS
 .DS_Store
 Thumbs.db
