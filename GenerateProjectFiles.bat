@@ -39,7 +39,7 @@ exit /b 1
 echo Using engine: %ENGINE_DIR%
 
 pushd "%ENGINE_DIR%"
-call "%ENGINE_DIR%\GenerateProjectFiles.bat" -project="%PROJECT_UPROJECT%" -vscode
+call "%ENGINE_DIR%\GenerateProjectFiles.bat" -project="%PROJECT_UPROJECT%"
 set "ERRORLEVEL_SAVE=%ERRORLEVEL%"
 popd
 
