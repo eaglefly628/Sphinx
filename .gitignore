@@ -24,6 +24,7 @@ Plugins/*/Intermediate/
 # IDE
 .vscode/
 .vs/
+.ignore
 *.code-workspace
 
 # OS
