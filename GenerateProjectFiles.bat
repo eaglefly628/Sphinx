@@ -3,7 +3,7 @@ setlocal
 
 set "PROJECT_DIR=%~dp0"
 set "PROJECT_UPROJECT=%PROJECT_DIR%eaglewalk.uproject"
-set "ENGINE_DIR=%PROJECT_DIR%..\UnrealEngine"
+set "ENGINE_DIR=D:\Project\SimWorldPrj\UnrealEngine"
 
 if not exist "%PROJECT_UPROJECT%" (
     echo Cannot find "%PROJECT_UPROJECT%".
