@@ -154,7 +154,18 @@ agents/
 
 Phase 0-4 全部完成 ✅
 
-待讨论/实现:
+### 已入库插件
+- **CesiumForUnreal**: 3D 地球渲染，WITH_CESIUM 软依赖
+- **UltraDynamicSky**: 天空/天气/昼夜，纯 Blueprint 插件，WITH_UDS 软依赖
+- **GISProcedural**: 自研 GIS 程序化生成（21 个 .h + 21 个 .cpp）
+
+### 项目构建
+- 引擎：AngelScript 定制版 UE5（源码编译）
+- 项目 Target：`Source/eaglewalk.Target.cs` + `Source/eaglewalkEditor.Target.cs`
+- 生成工程文件：运行项目根目录 `GenerateProjectFiles.bat`（需设 `UE_ENGINE_DIR` 环境变量）
+
+### 待实现（Phase 5）
 - 立交桥/涵洞 PCG 生成（需 bridge/tunnel 标签提取 + LayerIndex 分离）
 - 道路 Spline Mesh 生成
 - 水体 Mesh 生成
+- UDS 天气系统集成（WeatherBridgeComponent，AngelScript 优先）

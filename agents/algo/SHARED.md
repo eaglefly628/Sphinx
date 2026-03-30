@@ -29,6 +29,22 @@ ELandUseType ClassifySingle(const FLandUsePolygon& Poly,
 - RoadNetworkGraph LayerIndex 分离（立交桥不交叉分割）
 - 道路逐顶点高程（当前只有 AvgElevation）
 
+### 技能清单
+
+| 模块 | 文件数 | 状态 | 复杂度 |
+|------|--------|------|--------|
+| PolygonDeriver | 2 (.h/.cpp) | ✅ 完成 | 6 步管线，~800 行 |
+| TerrainAnalyzer | 2 | ✅ 完成 | Horn Sobel + Union-Find CCL |
+| LandUseClassifier | 2 | ✅ 完成 | 9 规则 + ESA 融合 |
+| RoadNetworkGraph | 2 | ✅ 完成 | O(n²) 交叉 + 面提取 |
+| DEMParser | 3 (.h+types.h+.cpp) | ✅ 完成 | PNG/RAW/HGT/GeoTIFF |
+
+### 与其他 agent 的依赖
+
+- **← pipeline**: GeoJsonParser 提供 FGISFeature（含 OSM 标签），DEMParser 消费 pipeline 预处理的 DEM
+- **→ runtime**: PolygonDeriver 输出 TArray<FLandUsePolygon>，runtime 的 GISWorldBuilder 调用
+- **→ runtime**: RoadNetworkGraph 输出道路结构，未来 runtime 做 Spline Mesh 消费
+
 ## TODO (from lead review / peer review)
 
 （暂无）
@@ -37,3 +53,4 @@ ELandUseType ClassifySingle(const FLandUsePolygon& Poly,
 
 ### [v1.0.0] — algo
 - 初始状态记录
+- Lead review: 补充技能清单和依赖关系
