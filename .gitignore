@@ -19,8 +19,7 @@ Saved/
 Plugins/*/Binaries/
 Plugins/*/Intermediate/
 
-# Third-party plugins (cloned or installed locally, not tracked in git)
-Plugins/CesiumForUnreal/
+# UDS plugin (user-installed, large binary content)
 Plugins/UltraDynamicSky/
 
 # OS
