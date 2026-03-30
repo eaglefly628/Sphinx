@@ -28,7 +28,9 @@ public class GISProcedural : ModuleRules
         });
 
         // Cesium 软依赖：仅在 CesiumRuntime 模块存在时启用
-        bool bHasCesium = Directory.Exists(Path.Combine(PluginsDirectory, "CesiumForUnreal")) ||
+        // PluginDirectory 指向当前插件目录，向上两级到项目 Plugins/
+        string ProjectPluginsDir = Path.GetFullPath(Path.Combine(PluginDirectory, ".."));
+        bool bHasCesium = Directory.Exists(Path.Combine(ProjectPluginsDir, "CesiumForUnreal")) ||
                           Directory.Exists(Path.Combine(EngineDirectory, "Plugins", "Marketplace", "CesiumForUnreal"));
 
         if (bHasCesium)
