@@ -19,14 +19,15 @@
 - **每次 push 必须包含 changelog 条目**，无例外
 
 ### Agent Names (canonical)
-| Agent | Name | Domain |
-|-------|------|--------|
-| algo | 算法 | 多边形推导、地形分析、分类器、道路网络、DEM 解析 |
-| runtime | 运行时 | GISWorldBuilder 五模式、Cesium 桥接、PCG 节点、坐标转换 |
-| pipeline | 管线 | Python 预处理、数据提供者、瓦片系统、GeoJSON/Raster 解析 |
-| uds | 天气 | Ultra Dynamic Sky 集成、天气系统、云层/雾/雨雪、昼夜循环 |
+| Agent | Name | 负责人 | Domain |
+|-------|------|--------|--------|
+| lead | 主管 | 牛马老白 | 架构决策、任务分配、Code Review、版本管理 |
+| runtime | 渲染引擎 | 志轩 | GISWorldBuilder 五模式、Cesium 桥接、PCG 节点、坐标转换 |
+| uds | UDS 工程师 | 小U | Ultra Dynamic Sky 集成、天气系统、云层/雾/雨雪、昼夜循环 |
+| algo | 核心插件算法 | 小蒜 | 多边形推导、地形分析、分类器、道路网络、DEM 解析 |
+| pipeline | 架构和管线 | 翔云 | Python 预处理、数据提供者、瓦片系统、GeoJSON/Raster 解析 |
 
-使用这些精确名字（algo / runtime / pipeline / uds），不许变体。
+使用这些精确名字（lead / algo / runtime / pipeline / uds），不许变体。
 
 ## 快速参考
 
