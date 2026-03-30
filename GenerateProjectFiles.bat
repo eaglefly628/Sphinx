@@ -38,10 +38,15 @@ exit /b 1
 :found
 echo Using engine: %ENGINE_DIR%
 
-pushd "%ENGINE_DIR%"
-call "%ENGINE_DIR%\GenerateProjectFiles.bat" -project="%PROJECT_UPROJECT%"
+REM 用 UBT 生成仅项目代码的 VS Code 工程（不含引擎源码）
+set "UBT=%ENGINE_DIR%\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe"
+if not exist "%UBT%" (
+    echo Cannot find UnrealBuildTool at: %UBT%
+    pause
+    exit /b 1
+)
+"%UBT%" -projectfiles -project="%PROJECT_UPROJECT%" -game -vscode
 set "ERRORLEVEL_SAVE=%ERRORLEVEL%"
-popd
 
 if %ERRORLEVEL_SAVE% NEQ 0 (
     echo Error code: %ERRORLEVEL_SAVE%.
