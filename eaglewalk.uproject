@@ -1,0 +1,27 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1.0",
+	"FriendlyName": "EagleWalk",
+	"EngineAssociation": "",
+	"Category": "Geospatial",
+	"Description": "GIS-driven procedural military simulation with Cesium, UltraDynamicSky, and GISProcedural.",
+	"CreatedBy": "EagleFly Team",
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Plugins": [
+		{
+			"Name": "CesiumForUnreal",
+			"Enabled": true,
+			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/content/87b0d05800a545d49bf858ef3458c4f7"
+		},
+		{
+			"Name": "SunPosition",
+			"Enabled": true
+		},
+		{
+			"Name": "GISProcedural",
+			"Enabled": true
+		}
+	]
+}
