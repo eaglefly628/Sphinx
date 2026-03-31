@@ -369,7 +369,7 @@ void AGISWorldBuilder::SpawnPolygonActors(const TArray<FLandUsePolygon>& Polygon
 
             UGISPolygonComponent* Comp = NewObject<UGISPolygonComponent>(
                 PolygonActor, UGISPolygonComponent::StaticClass(),
-                FName(*ActorLabel));
+                FName(*PolyLabel));
             Comp->SetPolygonData(Poly);
             Comp->RegisterComponent();
             PolygonActor->AddInstanceComponent(Comp);
