@@ -157,24 +157,28 @@ public class CesiumRuntime : ModuleRules
 
     private void RunProcess(string fileName, string arguments, Dictionary<string, string> extraEnv = null)
     {
-        Console.WriteLine("> " + fileName + " " + arguments);
-        var psi = new ProcessStartInfo
-        {
-            FileName = fileName,
-            Arguments = arguments,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            WorkingDirectory = Path.GetTempPath()
-        };
+        // 通过 cmd.exe /c 运行，继承完整的 shell 环境（PATH, git 等）
+        string cmdLine = string.Format("\"{0}\" {1}", fileName, arguments);
+        Console.WriteLine("> " + cmdLine);
 
+        // 构建环境变量前缀（set VAR=VAL &&）
+        string envPrefix = "";
         if (extraEnv != null)
         {
             foreach (var kv in extraEnv)
             {
-                psi.Environment[kv.Key] = kv.Value;
+                envPrefix += string.Format("set \"{0}={1}\" && ", kv.Key, kv.Value);
             }
         }
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "cmd.exe",
+            Arguments = string.Format("/c \"{0}{1}\"", envPrefix, cmdLine),
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
 
         using (var proc = Process.Start(psi))
         {
