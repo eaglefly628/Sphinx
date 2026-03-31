@@ -23,6 +23,7 @@ Plugins/*/Intermediate/
 Plugins/CesiumForUnreal/extern/build/
 
 # UDS large binaries handled by Git LFS (see .gitattributes)
+# UDS lives in Content/UltraDynamicSky/ (content-only plugin, no .uplugin)
 
 # IDE
 .vscode/

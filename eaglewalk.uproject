@@ -22,11 +22,6 @@
 		{
 			"Name": "GISProcedural",
 			"Enabled": true
-		},
-		{
-			"Name": "UltraDynamicSky",
-			"Enabled": true,
-			"Optional": true
 		}
 	]
 }
