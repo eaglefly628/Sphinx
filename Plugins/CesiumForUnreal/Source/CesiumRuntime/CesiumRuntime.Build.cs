@@ -3,14 +3,126 @@
 using UnrealBuildTool;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 
 public class CesiumRuntime : ModuleRules
 {
+    /// <summary>
+    /// 自动构建 cesium-native：检测 ThirdParty 是否存在，不存在则调用 CMake 构建。
+    /// </summary>
+    private void EnsureCesiumNativeBuilt(string Config)
+    {
+        string thirdPartyDir = Path.Combine(ModuleDirectory, "../ThirdParty");
+        string includeDir = Path.Combine(thirdPartyDir, "include");
+        string externDir = Path.GetFullPath(Path.Combine(ModuleDirectory, "../../extern"));
+        string buildDir = Path.Combine(externDir, "build");
+
+        // 已经构建过则跳过
+        if (Directory.Exists(includeDir) && Directory.GetFiles(includeDir, "*.h", SearchOption.AllDirectories).Length > 0)
+        {
+            return;
+        }
+
+        Console.WriteLine("====================================================================");
+        Console.WriteLine("  cesium-native ThirdParty not found, auto-building from source...");
+        Console.WriteLine("  extern: " + externDir);
+        Console.WriteLine("  config: " + Config);
+        Console.WriteLine("====================================================================");
+
+        // 查找 UE 引擎路径
+        string engineRoot = FindEngineRoot();
+        if (string.IsNullOrEmpty(engineRoot))
+        {
+            throw new BuildException(
+                "Cannot auto-build cesium-native: UE engine root not found. " +
+                "Set UE_ENGINE_DIR environment variable, or run BuildCesiumNative.bat manually.");
+        }
+
+        // CMake configure
+        RunProcess("cmake",
+            string.Format("-B \"{0}\" -S \"{1}\" -A x64 -DUNREAL_ENGINE_ROOT=\"{2}\"",
+                buildDir, externDir, engineRoot));
+
+        // CMake build
+        RunProcess("cmake",
+            string.Format("--build \"{0}\" --config {1} --parallel", buildDir, Config));
+
+        // CMake install → Source/ThirdParty/
+        RunProcess("cmake",
+            string.Format("--install \"{0}\" --config {1}", buildDir, Config));
+
+        Console.WriteLine("====================================================================");
+        Console.WriteLine("  cesium-native build complete.");
+        Console.WriteLine("====================================================================");
+    }
+
+    private string FindEngineRoot()
+    {
+        // 1. 环境变量 UE_ENGINE_DIR
+        string envDir = Environment.GetEnvironmentVariable("UE_ENGINE_DIR");
+        if (!string.IsNullOrEmpty(envDir) && Directory.Exists(Path.Combine(envDir, "Engine", "Build")))
+        {
+            return envDir;
+        }
+
+        // 2. 从项目目录推断（项目同级 UnrealEngine/）
+        string projectRoot = Path.GetFullPath(Path.Combine(ModuleDirectory, "../../../../.."));
+        string siblingEngine = Path.Combine(projectRoot, "..", "UnrealEngine");
+        if (Directory.Exists(Path.Combine(siblingEngine, "Engine", "Build")))
+        {
+            return Path.GetFullPath(siblingEngine);
+        }
+
+        // 3. 从 EngineDirectory 属性（UBT 内置）
+        if (!string.IsNullOrEmpty(EngineDirectory) && Directory.Exists(Path.Combine(EngineDirectory, "Build")))
+        {
+            return Path.GetFullPath(Path.Combine(EngineDirectory, ".."));
+        }
+
+        return null;
+    }
+
+    private void RunProcess(string fileName, string arguments)
+    {
+        Console.WriteLine("> " + fileName + " " + arguments);
+        var psi = new ProcessStartInfo
+        {
+            FileName = fileName,
+            Arguments = arguments,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+
+        using (var proc = Process.Start(psi))
+        {
+            // 异步读取避免死锁
+            string stdout = proc.StandardOutput.ReadToEnd();
+            string stderr = proc.StandardError.ReadToEnd();
+            proc.WaitForExit();
+
+            if (!string.IsNullOrEmpty(stdout)) Console.Write(stdout);
+            if (!string.IsNullOrEmpty(stderr)) Console.Error.Write(stderr);
+
+            if (proc.ExitCode != 0)
+            {
+                throw new BuildException(
+                    string.Format("cesium-native build failed: {0} {1}\nExit code: {2}",
+                        fileName, arguments, proc.ExitCode));
+            }
+        }
+    }
+
     public CesiumRuntime(ReadOnlyTargetRules Target) : base(Target)
     {
+        // 自动构建 cesium-native（首次编译时触发）
+        string cmakeConfig = (Target.Configuration == UnrealTargetConfiguration.Debug ||
+                              Target.Configuration == UnrealTargetConfiguration.DebugGame) ? "Debug" : "Release";
+        EnsureCesiumNativeBuilt(cmakeConfig);
+
         PublicIncludePaths.AddRange(
             new string[] {
                 Path.Combine(ModuleDirectory, "../ThirdParty/include")
