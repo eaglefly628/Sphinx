@@ -359,12 +359,12 @@ void AGISWorldBuilder::SpawnPolygonActors(const TArray<FLandUsePolygon>& Polygon
 
         if (PolygonActor)
         {
-            FString ActorLabel = FString::Printf(TEXT("GIS_Poly_%d_%s"),
+            FString PolyLabel = FString::Printf(TEXT("GIS_Poly_%d_%s"),
                 Poly.PolygonID,
                 *UEnum::GetDisplayValueAsText(Poly.LandUseType).ToString());
 
 #if WITH_EDITOR
-            PolygonActor->SetActorLabel(ActorLabel);
+            PolygonActor->SetActorLabel(PolyLabel);
 #endif
 
             UGISPolygonComponent* Comp = NewObject<UGISPolygonComponent>(
