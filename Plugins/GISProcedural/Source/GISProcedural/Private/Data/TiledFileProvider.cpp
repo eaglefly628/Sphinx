@@ -301,7 +301,7 @@ void UTiledFileProvider::EvictOldestCache()
 {
     if (FeatureCache.Num() == 0) return;
 
-    FIntPoint OldestKey;
+    FIntPoint OldestKey(0, 0);
     uint64 OldestFrame = UINT64_MAX;
 
     for (const auto& Pair : FeatureCache)
