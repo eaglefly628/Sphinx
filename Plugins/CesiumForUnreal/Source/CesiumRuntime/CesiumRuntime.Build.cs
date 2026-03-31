@@ -51,18 +51,26 @@ public class CesiumRuntime : ModuleRules
                 "Set UE_ENGINE_DIR environment variable, or run BuildCesiumNative.bat manually.");
         }
 
+        // ezvcpkg 需要一个有效的 Windows 路径作为缓存目录
+        string vcpkgCache = Path.Combine(buildDir, ".ezvcpkg");
+        var env = new Dictionary<string, string>
+        {
+            { "EZVCPKG_BASEDIR", vcpkgCache }
+        };
+        Console.WriteLine("  EZVCPKG_BASEDIR: " + vcpkgCache);
+
         // CMake configure
         RunProcess(cmake,
             string.Format("-B \"{0}\" -S \"{1}\" -A x64 -DUNREAL_ENGINE_ROOT=\"{2}\"",
-                buildDir, externDir, engineRoot));
+                buildDir, externDir, engineRoot), env);
 
         // CMake build
         RunProcess(cmake,
-            string.Format("--build \"{0}\" --config {1} --parallel", buildDir, Config));
+            string.Format("--build \"{0}\" --config {1} --parallel", buildDir, Config), env);
 
         // CMake install → Source/ThirdParty/
         RunProcess(cmake,
-            string.Format("--install \"{0}\" --config {1}", buildDir, Config));
+            string.Format("--install \"{0}\" --config {1}", buildDir, Config), env);
 
         Console.WriteLine("====================================================================");
         Console.WriteLine("  cesium-native build complete.");
@@ -147,7 +155,7 @@ public class CesiumRuntime : ModuleRules
         return null;
     }
 
-    private void RunProcess(string fileName, string arguments)
+    private void RunProcess(string fileName, string arguments, Dictionary<string, string> extraEnv = null)
     {
         Console.WriteLine("> " + fileName + " " + arguments);
         var psi = new ProcessStartInfo
@@ -159,6 +167,14 @@ public class CesiumRuntime : ModuleRules
             RedirectStandardError = true,
             WorkingDirectory = Path.GetTempPath()
         };
+
+        if (extraEnv != null)
+        {
+            foreach (var kv in extraEnv)
+            {
+                psi.Environment[kv.Key] = kv.Value;
+            }
+        }
 
         using (var proc = Process.Start(psi))
         {
