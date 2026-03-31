@@ -5,6 +5,7 @@
 #include "PCG/PCGLandUseData.h"
 #include "Data/LandUseMapDataAsset.h"
 #include "PCGContext.h"
+#include "PCGComponent.h"
 #include "PCGPin.h"
 #include "Data/PCGPointData.h"
 #include "Helpers/PCGHelpers.h"
@@ -102,10 +103,11 @@ bool FPCGGISLandUseSamplerElement::ExecuteInternal(FPCGContext* Context) const
     const TArray<FLandUsePolygon>* PolygonsToSample = &DataAsset->Polygons;
     TArray<FLandUsePolygon> TileFilteredPolygons;
 
-    if (Settings->bEnableTiling && Context->SourceComponent.IsValid())
+    UPCGComponent* SourceComp = Context->SourceComponent.Get();
+    if (Settings->bEnableTiling && SourceComp != nullptr)
     {
         // 获取当前 PCG 组件的世界 bounds
-        const FBox ComponentBounds = Context->SourceComponent->Bounds.GetBox();
+        const FBox ComponentBounds = SourceComp->GetOwner()->GetComponentsBoundingBox();
         const float TileHalfExtent = Settings->TileSizeM * 100.0f * Settings->LoadRadius;
         const FVector Center = ComponentBounds.GetCenter();
         constexpr float LargeZ = 1e10f;

@@ -99,18 +99,18 @@ TPair<int32, bool> FRoadNetworkGraph::GetLeftmostTurn(int32 CurrentEdgeID, bool 
 
     // 最左转 = 角度排序中的下一条边
     const int32 NextIndex = (CurrentIndex + 1) % SortedEdges.Num();
-    const int32 NextEdgeID = SortedEdges[NextIndex].Key;
+    const int32 FoundEdgeID = SortedEdges[NextIndex].Key;
 
-    if (!Edges.IsValidIndex(NextEdgeID))
+    if (!Edges.IsValidIndex(FoundEdgeID))
     {
         return TPair<int32, bool>(INDEX_NONE, false);
     }
 
     // 判断下一条边的行走方向
-    const FRoadEdge& NextEdge = Edges[NextEdgeID];
+    const FRoadEdge& NextEdge = Edges[FoundEdgeID];
     const bool bNextForward = (NextEdge.StartNodeID == ArrivalNodeID);
 
-    return TPair<int32, bool>(NextEdgeID, bNextForward);
+    return TPair<int32, bool>(FoundEdgeID, bNextForward);
 }
 
 void FRoadNetworkGraph::Reset()
