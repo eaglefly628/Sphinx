@@ -1,59 +1,92 @@
-# UE AngelScript 语法规范
+# UE AngelScript 语法指南
 
-UE AngelScript ≠ 原版 AngelScript，是类 C++ 的脚本语言，写 `.as` 前必读此文档。
+写 `.as` 前必读。UE AngelScript ≠ 原版 AngelScript，也 ≠ C++。
 
-## 基础示例
+## 项目中实际踩过的坑
 
+### AS-1: `default:` 块不支持（UE 5.7）
 ```angelscript
+// ❌ 编译报错
 class AMyActor : AActor
 {
     default:
     bReplicates = false;
+}
 
+// ✅ 直接去掉 default 块
+class AMyActor : AActor
+{
     UPROPERTY(DefaultComponent, RootComponent)
     USceneComponent Root;
-
-    UPROPERTY(DefaultComponent, Attach = Root)
-    UStaticMeshComponent Mesh;
-
-    UPROPERTY(BlueprintReadWrite, Category = "GIS")
-    float WeatherIntensity = 0.0f;
-
-    UFUNCTION(BlueprintOverride)
-    void BeginPlay()
-    {
-        Print("Hello from AngelScript!");
-    }
-
-    UFUNCTION(BlueprintCallable, Category = "GIS")
-    void SetWeather(float Intensity)
-    {
-        WeatherIntensity = Intensity;
-    }
 }
 ```
+> commit dd5e57f: EagleWalkTest.as 因 default: 块编译失败
 
-## 常见错误清单
+### AS-2: `GetName()` 返回 FName 不是 FString
+```angelscript
+// ❌ 类型不匹配
+FString ClassName = A.GetClass().GetName();
 
-| C++ 写法（错） | AngelScript 写法（对） |
-|----------------|----------------------|
-| `auto x = ...` | 写明确类型 `FVector x = ...` |
-| `#include "xxx.h"` | 无 include，所有类型自动可见 |
-| `UE_LOG(LogGIS, Log, TEXT("..."))` | `Print("...")` 或 `Log("...")` |
-| `virtual void Foo() override` | `UFUNCTION(BlueprintOverride) void Foo()` |
-| `this->Member` | 直接访问 `Member` |
-| `FString::Printf(TEXT("x=%d"), x)` | `"x=" + x` 字符串拼接 |
-| `.h` + `.cpp` 分文件 | 单个 `.as` 文件包含完整类 |
-| `UPROPERTY()` 在函数体内 | 只在类成员层级写 |
+// ✅ 显式转换
+FString ClassName = A.GetClass().GetName().ToString();
+```
+> commit de7b988: WeatherBridge.as 编译错误
 
-## 关键语法点
+### AS-3: `GetAllActorsOfClass` 是输出参数模式
+```angelscript
+// ❌ C++ 风格，AS 不支持
+TArray<AActor> Found;
+Gameplay::GetAllActorsOfClass(AActor::StaticClass(), Found);
 
-- 继承用 `:` 不用 `public`
-- `default:` 块设置 CDO 属性（冒号结尾，不是大括号）
-- `Cast<T>(Obj)` 和 C++ 一致
-- `n"FuncName"` 是 FName 字面量
-- `System::SetTimer(this, n"MyFunc", 1.0f, true)` 定时器
-- 反射调用 BP-only 插件：`Obj.CallFunction(n"FuncName", Args...)`
+// ✅ 模板化输出参数
+TArray<AActor> Actors;
+Gameplay::GetAllActorsOfClass(Actors);
+```
+> commit de7b988: WeatherBridge.as API 用法错误
+
+## C++ 侧实际踩过的坑（写插件 C++ 时注意）
+
+### CPP-1: 废弃 API
+```cpp
+// ❌ UE 新版已移除
+FGenericPlatformHttp::UrlEncode(...)   // → FPlatformHttp::UrlEncode(...)
+Context->SourceComponent.IsValid()     // → Context->SourceComponent.Get() != nullptr
+RootObject->TryGetStringField(...)     // → HasField() + GetStringField()
+```
+
+### CPP-2: 变量名遮蔽类成员
+```cpp
+// ❌ ActorLabel 遮蔽 AActor::ActorLabel
+FString ActorLabel = FString::Printf(...);
+
+// ✅ 换名
+FString PolyLabel = FString::Printf(...);
+```
+
+### CPP-3: 异步回调捕获 `this` 导致 use-after-free
+```cpp
+// ❌ 对象可能被 GC
+StreamableManager.RequestAsyncLoad(Path,
+    FStreamableDelegate::CreateLambda([this, TileID]() { ... }));
+
+// ✅ 用 WeakPtr
+TWeakObjectPtr<UMyClass> WeakThis(this);
+StreamableManager.RequestAsyncLoad(Path,
+    FStreamableDelegate::CreateLambda([WeakThis, TileID]() {
+        UMyClass* Self = WeakThis.Get();
+        if (!Self) return;
+        Self->DoStuff();
+    }));
+```
+
+### CPP-4: Build.cs API 不存在
+```csharp
+// ❌ PluginsDirectory 在定制引擎不存在
+Directory.Exists(Path.Combine(PluginsDirectory, "CesiumForUnreal"))
+
+// ✅ 用 PluginDirectory（当前插件目录）向上找
+string ProjectPluginsDir = Path.GetFullPath(Path.Combine(PluginDirectory, ".."));
+```
 
 ## 文件目录
 
