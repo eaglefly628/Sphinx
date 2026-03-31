@@ -51,18 +51,31 @@ public class CesiumRuntime : ModuleRules
                 "Set UE_ENGINE_DIR environment variable, or run BuildCesiumNative.bat manually.");
         }
 
-        // ezvcpkg 需要一个有效的 Windows 路径作为缓存目录
-        string vcpkgCache = Path.Combine(buildDir, ".ezvcpkg");
-        var env = new Dictionary<string, string>
+        // vcpkg 策略：优先用本地 VCPKG_ROOT（跳过 ezvcpkg 在线 clone）
+        string vcpkgRoot = Environment.GetEnvironmentVariable("VCPKG_ROOT");
+        string cmakeExtra = "";
+        var env = new Dictionary<string, string>();
+
+        if (!string.IsNullOrEmpty(vcpkgRoot) && Directory.Exists(vcpkgRoot))
         {
-            { "EZVCPKG_BASEDIR", vcpkgCache }
-        };
-        Console.WriteLine("  EZVCPKG_BASEDIR: " + vcpkgCache);
+            // 用户已安装 vcpkg，跳过 ezvcpkg
+            string toolchainFile = Path.Combine(vcpkgRoot, "scripts", "buildsystems", "vcpkg.cmake");
+            cmakeExtra = string.Format(" -DCESIUM_USE_EZVCPKG=OFF -DCMAKE_TOOLCHAIN_FILE=\"{0}\"", toolchainFile);
+            Console.WriteLine("  VCPKG_ROOT: " + vcpkgRoot + " (skip ezvcpkg)");
+        }
+        else
+        {
+            // 回退 ezvcpkg（需要网络）
+            string vcpkgCache = Path.Combine(buildDir, ".ezvcpkg");
+            env["EZVCPKG_BASEDIR"] = vcpkgCache;
+            Console.WriteLine("  EZVCPKG_BASEDIR: " + vcpkgCache + " (online mode)");
+            Console.WriteLine("  TIP: Set VCPKG_ROOT env var to a local vcpkg clone to skip online download.");
+        }
 
         // CMake configure
         RunProcess(cmake,
-            string.Format("-B \"{0}\" -S \"{1}\" -A x64 -DUNREAL_ENGINE_ROOT=\"{2}\"",
-                buildDir, externDir, engineRoot), env);
+            string.Format("-B \"{0}\" -S \"{1}\" -A x64 -DUNREAL_ENGINE_ROOT=\"{2}\"{3}",
+                buildDir, externDir, engineRoot, cmakeExtra), env);
 
         // CMake build
         RunProcess(cmake,
