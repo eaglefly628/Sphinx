@@ -10,3 +10,7 @@ Plugins/UltraDynamicSky/**/*.wav filter=lfs diff=lfs merge=lfs -text
 Plugins/UltraDynamicSky/**/*.mp3 filter=lfs diff=lfs merge=lfs -text
 Plugins/UltraDynamicSky/**/*.dll filter=lfs diff=lfs merge=lfs -text
 Plugins/UltraDynamicSky/**/*.so filter=lfs diff=lfs merge=lfs -text
+Plugins/CesiumForUnreal/Source/ThirdParty/lib/**/*.lib filter=lfs diff=lfs merge=lfs -text
+Plugins/CesiumForUnreal/Source/ThirdParty/lib/**/*.a filter=lfs diff=lfs merge=lfs -text
+Plugins/CesiumForUnreal/Content/**/*.uasset filter=lfs diff=lfs merge=lfs -text
+Plugins/CesiumForUnreal/Content/**/*.umap filter=lfs diff=lfs merge=lfs -text

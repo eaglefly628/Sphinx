@@ -19,6 +19,9 @@ Saved/
 Plugins/*/Binaries/
 Plugins/*/Intermediate/
 
+# Cesium native build cache
+Plugins/CesiumForUnreal/extern/build/
+
 # UDS large binaries handled by Git LFS (see .gitattributes)
 
 # IDE
