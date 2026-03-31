@@ -33,3 +33,4 @@ Plugins/CesiumForUnreal/extern/build/
 # OS
 .DS_Store
 Thumbs.db
+Plugins/CesiumForUnreal/extern/
