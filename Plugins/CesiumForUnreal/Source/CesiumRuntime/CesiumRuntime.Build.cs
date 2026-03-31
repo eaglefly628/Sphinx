@@ -32,6 +32,16 @@ public class CesiumRuntime : ModuleRules
         Console.WriteLine("  config: " + Config);
         Console.WriteLine("====================================================================");
 
+        // 查找 cmake 完整路径（UBT 的 PATH 可能不含 cmake）
+        string cmake = FindCMake();
+        if (string.IsNullOrEmpty(cmake))
+        {
+            throw new BuildException(
+                "Cannot auto-build cesium-native: cmake.exe not found. " +
+                "Install CMake 3.15+ and ensure it's in PATH, or run BuildCesiumNative.bat manually.");
+        }
+        Console.WriteLine("  cmake: " + cmake);
+
         // 查找 UE 引擎路径
         string engineRoot = FindEngineRoot();
         if (string.IsNullOrEmpty(engineRoot))
@@ -42,16 +52,16 @@ public class CesiumRuntime : ModuleRules
         }
 
         // CMake configure
-        RunProcess("cmake",
+        RunProcess(cmake,
             string.Format("-B \"{0}\" -S \"{1}\" -A x64 -DUNREAL_ENGINE_ROOT=\"{2}\"",
                 buildDir, externDir, engineRoot));
 
         // CMake build
-        RunProcess("cmake",
+        RunProcess(cmake,
             string.Format("--build \"{0}\" --config {1} --parallel", buildDir, Config));
 
         // CMake install → Source/ThirdParty/
-        RunProcess("cmake",
+        RunProcess(cmake,
             string.Format("--install \"{0}\" --config {1}", buildDir, Config));
 
         Console.WriteLine("====================================================================");
@@ -85,6 +95,33 @@ public class CesiumRuntime : ModuleRules
         return null;
     }
 
+    private static string FindCMake()
+    {
+        // 1. 常见安装路径
+        string[] candidates = new string[]
+        {
+            @"C:\Program Files\CMake\bin\cmake.exe",
+            @"C:\Program Files (x86)\CMake\bin\cmake.exe",
+            @"C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
+            @"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
+            @"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
+        };
+        foreach (var c in candidates)
+        {
+            if (File.Exists(c)) return c;
+        }
+
+        // 2. 从 PATH 环境变量搜索
+        string pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
+        foreach (var dir in pathEnv.Split(Path.PathSeparator))
+        {
+            string full = Path.Combine(dir.Trim(), "cmake.exe");
+            if (File.Exists(full)) return full;
+        }
+
+        return null;
+    }
+
     private void RunProcess(string fileName, string arguments)
     {
         Console.WriteLine("> " + fileName + " " + arguments);
@@ -94,7 +131,8 @@ public class CesiumRuntime : ModuleRules
             Arguments = arguments,
             UseShellExecute = false,
             RedirectStandardOutput = true,
-            RedirectStandardError = true
+            RedirectStandardError = true,
+            WorkingDirectory = Path.GetTempPath()
         };
 
         using (var proc = Process.Start(psi))
