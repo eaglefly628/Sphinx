@@ -51,25 +51,62 @@ public class CesiumRuntime : ModuleRules
                 "Set UE_ENGINE_DIR environment variable, or run BuildCesiumNative.bat manually.");
         }
 
-        // vcpkg 策略：优先用本地 VCPKG_ROOT（跳过 ezvcpkg 在线 clone）
+        // ---- vcpkg 自动准备 ----
+        string vcpkgCommit = "afc0a2e01ae104a2474216a2df0e8d78516fd5af";
+        string vcpkgCacheBase = Path.Combine(buildDir, ".ezvcpkg");
+        string vcpkgDir = Path.Combine(vcpkgCacheBase, vcpkgCommit);
+        string vcpkgExe = Path.Combine(vcpkgDir, "vcpkg.exe");
+        var env = new Dictionary<string, string> { { "EZVCPKG_BASEDIR", vcpkgCacheBase } };
+
+        // 优先检测系统 VCPKG_ROOT
         string vcpkgRoot = Environment.GetEnvironmentVariable("VCPKG_ROOT");
         string cmakeExtra = "";
-        var env = new Dictionary<string, string>();
 
-        if (!string.IsNullOrEmpty(vcpkgRoot) && Directory.Exists(vcpkgRoot))
+        if (!string.IsNullOrEmpty(vcpkgRoot) && File.Exists(Path.Combine(vcpkgRoot, "vcpkg.exe")))
         {
-            // 用户已安装 vcpkg，跳过 ezvcpkg
             string toolchainFile = Path.Combine(vcpkgRoot, "scripts", "buildsystems", "vcpkg.cmake");
             cmakeExtra = string.Format(" -DCESIUM_USE_EZVCPKG=OFF -DCMAKE_TOOLCHAIN_FILE=\"{0}\"", toolchainFile);
             Console.WriteLine("  VCPKG_ROOT: " + vcpkgRoot + " (skip ezvcpkg)");
         }
         else
         {
-            // 回退 ezvcpkg（需要网络）
-            string vcpkgCache = Path.Combine(buildDir, ".ezvcpkg");
-            env["EZVCPKG_BASEDIR"] = vcpkgCache;
-            Console.WriteLine("  EZVCPKG_BASEDIR: " + vcpkgCache + " (online mode)");
-            Console.WriteLine("  TIP: Set VCPKG_ROOT env var to a local vcpkg clone to skip online download.");
+            // 自动 clone + bootstrap vcpkg
+            Console.WriteLine("  vcpkg dir: " + vcpkgDir);
+
+            if (!Directory.Exists(vcpkgDir) || !File.Exists(Path.Combine(vcpkgDir, "README.md")))
+            {
+                // 清理残留 lock 文件
+                string lockFile = vcpkgDir + ".lock";
+                if (File.Exists(lockFile))
+                {
+                    Console.WriteLine("  Removing stale lock file...");
+                    File.Delete(lockFile);
+                }
+
+                Console.WriteLine("  [1/3] Cloning vcpkg...");
+                if (!Directory.Exists(vcpkgCacheBase)) Directory.CreateDirectory(vcpkgCacheBase);
+                RunProcess("git",
+                    string.Format("clone https://github.com/microsoft/vcpkg.git \"{0}\"", vcpkgDir), env);
+                RunProcess("git",
+                    string.Format("-C \"{0}\" checkout {1}", vcpkgDir, vcpkgCommit), env);
+            }
+            else
+            {
+                Console.WriteLine("  vcpkg clone: already exists");
+            }
+
+            if (!File.Exists(vcpkgExe))
+            {
+                Console.WriteLine("  [2/3] Bootstrapping vcpkg...");
+                RunProcess("cmd.exe",
+                    string.Format("/c \"\"{0}\"\"", Path.Combine(vcpkgDir, "bootstrap-vcpkg.bat")), env);
+            }
+            else
+            {
+                Console.WriteLine("  vcpkg.exe: already exists");
+            }
+
+            Console.WriteLine("  [3/3] Running CMake configure...");
         }
 
         // CMake configure
