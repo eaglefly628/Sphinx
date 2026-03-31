@@ -75,7 +75,7 @@ class AWeatherBridge : AActor
 
         for (AActor A : AllActors)
         {
-            FString ClassName = A.GetClass().GetName();
+            FString ClassName = A.GetClass().GetName().ToString();
 
             if (UDSActor == nullptr && ClassName.Contains("Ultra_Dynamic_Sky"))
                 UDSActor = A;
@@ -90,9 +90,6 @@ class AWeatherBridge : AActor
 
     void GetAllActorsOfClass(TArray<AActor>& OutActors)
     {
-        // Get all actors in the world
-        TArray<AActor> Found;
-        Gameplay::GetAllActorsOfClass(AActor::StaticClass(), Found);
-        OutActors = Found;
+        Gameplay::GetAllActorsOfClass(OutActors);
     }
 }
