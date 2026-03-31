@@ -103,7 +103,9 @@ bool FPCGGISLandUseSamplerElement::ExecuteInternal(FPCGContext* Context) const
     const TArray<FLandUsePolygon>* PolygonsToSample = &DataAsset->Polygons;
     TArray<FLandUsePolygon> TileFilteredPolygons;
 
-    UPCGComponent* SourceComp = Context->SourceComponent.Get();
+PRAGMA_DISABLE_DEPRECATION_WARNINGS
+    UPCGComponent* SourceComp = Context->SourceComponent.IsValid() ? Context->SourceComponent.Get() : nullptr;
+PRAGMA_ENABLE_DEPRECATION_WARNINGS
     if (Settings->bEnableTiling && SourceComp != nullptr)
     {
         // 获取当前 PCG 组件的世界 bounds
