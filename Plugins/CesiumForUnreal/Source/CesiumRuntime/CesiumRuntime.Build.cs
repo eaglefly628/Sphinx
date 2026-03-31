@@ -97,21 +97,46 @@ public class CesiumRuntime : ModuleRules
 
     private static string FindCMake()
     {
-        // 1. 常见安装路径
+        // 1. 通过 vswhere 动态查找任意版本 VS 内置的 CMake
+        string vswhere = @"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe";
+        if (File.Exists(vswhere))
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = vswhere,
+                    Arguments = "-latest -requires Microsoft.VisualStudio.Component.VC.CMake.Project -property installationPath",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow = true
+                };
+                using (var proc = Process.Start(psi))
+                {
+                    string vsPath = proc.StandardOutput.ReadToEnd().Trim();
+                    proc.WaitForExit();
+                    if (!string.IsNullOrEmpty(vsPath))
+                    {
+                        string vsCmake = Path.Combine(vsPath, @"Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe");
+                        if (File.Exists(vsCmake)) return vsCmake;
+                    }
+                }
+            }
+            catch { /* vswhere failed, continue to fallback */ }
+        }
+
+        // 2. 独立安装的 CMake
         string[] candidates = new string[]
         {
             @"C:\Program Files\CMake\bin\cmake.exe",
             @"C:\Program Files (x86)\CMake\bin\cmake.exe",
-            @"C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
-            @"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
-            @"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
         };
         foreach (var c in candidates)
         {
             if (File.Exists(c)) return c;
         }
 
-        // 2. 从 PATH 环境变量搜索
+        // 3. 从 PATH 环境变量搜索
         string pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
         foreach (var dir in pathEnv.Split(Path.PathSeparator))
         {
