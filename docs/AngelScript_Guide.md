@@ -32,17 +32,15 @@ FString ClassName = A.GetClass().GetName().ToString();
 ```
 > commit de7b988: WeatherBridge.as 编译错误
 
-### AS-3: `GetAllActorsOfClass` 是输出参数模式
+### AS-3: `GetAllActorsOfClass` 必须传 ActorClass 参数
 ```angelscript
-// ❌ C++ 风格，AS 不支持
-TArray<AActor> Found;
-Gameplay::GetAllActorsOfClass(AActor::StaticClass(), Found);
+// ❌ 省略 ActorClass 参数
+Gameplay::GetAllActorsOfClass(OutActors);
 
-// ✅ 模板化输出参数
-TArray<AActor> Actors;
-Gameplay::GetAllActorsOfClass(Actors);
+// ✅ 必须传 TSubclassOf<AActor> 第一个参数
+Gameplay::GetAllActorsOfClass(AActor::StaticClass(), OutActors);
 ```
-> commit de7b988: WeatherBridge.as API 用法错误
+> commit b282d3d: 签名是 `(TSubclassOf<AActor>, TArray<AActor>&)`，不能省略
 
 ## C++ 侧实际踩过的坑（写插件 C++ 时注意）
 
