@@ -90,6 +90,6 @@ class AWeatherBridge : AActor
 
     void GetAllActorsOfClass(TArray<AActor>& OutActors)
     {
-        Gameplay::GetAllActorsOfClass(OutActors);
+        Gameplay::GetAllActorsOfClass(AActor::StaticClass(), OutActors);
     }
 }
