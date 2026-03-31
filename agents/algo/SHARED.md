@@ -54,3 +54,8 @@ ELandUseType ClassifySingle(const FLandUsePolygon& Poly,
 ### [v1.0.0] — algo
 - 初始状态记录
 - Lead review: 补充技能清单和依赖关系
+
+### [v1.0.1] 4009556 — algo
+- fix: ArcGISRestProvider FGenericPlatformHttp::UrlEncode → FPlatformHttp::UrlEncode（UE5 新版 API）
+- fix: PCGGISNode SourceComponent 废弃 API → .Get() + PCGComponent.h include
+- fix: RoadNetworkGraph 局部变量 NextEdgeID 遮蔽类成员 → 重命名 FoundEdgeID
