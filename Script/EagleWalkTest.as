@@ -3,9 +3,6 @@
 
 class AEagleWalkTest : AActor
 {
-    default:
-    bReplicates = false;
-
     UPROPERTY(DefaultComponent, RootComponent)
     USceneComponent Root;
 
@@ -14,7 +11,7 @@ class AEagleWalkTest : AActor
     {
         Print("========================================");
         Print("  EagleWalk AngelScript OK!");
-        Print("  Engine: UE 5.6 + AngelScript");
+        Print("  Engine: UE 5.7 + AngelScript");
         Print("========================================");
     }
 }
