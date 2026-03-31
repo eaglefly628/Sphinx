@@ -4,7 +4,6 @@
 #include "CesiumPropertyArray.h"
 #include "CesiumPropertyArrayBlueprintLibrary.h"
 #include "UnrealMetadataConversions.h"
-
 #include <CesiumGltf/MetadataConversions.h>
 #include <CesiumGltf/PropertyTypeTraits.h>
 

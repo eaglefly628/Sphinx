@@ -1,3 +1,0 @@
-line 7 column 1 - Access: [1.1.6.5]: audio missing text transcript (ra).
-No warnings or errors were found.
-

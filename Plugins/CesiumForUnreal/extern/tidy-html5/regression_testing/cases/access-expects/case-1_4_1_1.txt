@@ -1,3 +1,0 @@
-line 7 column 1 - Access: [1.4.1.1]: multimedia requires synchronized text equivalents.
-No warnings or errors were found.
-

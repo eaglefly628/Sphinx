@@ -9,37 +9,8 @@ using System.Reflection;
 
 public class CesiumRuntime : ModuleRules
 {
-    /// <summary>
-    /// 检测 cesium-native ThirdParty 是否已构建，未构建则报错提示。
-    /// </summary>
-    private void EnsureCesiumNativeBuilt(string Config)
-    {
-        string thirdPartyDir = Path.Combine(ModuleDirectory, "../ThirdParty");
-        string includeDir = Path.Combine(thirdPartyDir, "include");
-
-        // 已构建则跳过
-        if (Directory.Exists(includeDir) && Directory.GetFiles(includeDir, "*.h", SearchOption.AllDirectories).Length > 0)
-        {
-            return;
-        }
-
-        // 未构建，给出清晰的操作指引
-        string projectRoot = Path.GetFullPath(Path.Combine(ModuleDirectory, "../../../../.."));
-        throw new BuildException(
-            "\n====================================================================\n" +
-            "  cesium-native ThirdParty not found!\n" +
-            "  Please run BuildCesiumNative.bat once before building:\n\n" +
-            "    cd " + projectRoot + "\n" +
-            "    BuildCesiumNative.bat\n\n" +
-            "  This only needs to be done once. Subsequent builds will skip it.\n" +
-            "====================================================================");
-    }
-
     public CesiumRuntime(ReadOnlyTargetRules Target) : base(Target)
     {
-        // 检测 cesium-native 是否已构建
-        EnsureCesiumNativeBuilt("Release");
-
         PublicIncludePaths.AddRange(
             new string[] {
                 Path.Combine(ModuleDirectory, "../ThirdParty/include")

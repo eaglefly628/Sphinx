@@ -3,7 +3,6 @@
 #include "CesiumPropertyAttributeProperty.h"
 #include "CesiumMetadataEnum.h"
 #include "UnrealMetadataConversions.h"
-
 #include <CesiumGltf/MetadataConversions.h>
 #include <CesiumGltf/PropertyTypeTraits.h>
 #include <utility>
@@ -382,24 +381,6 @@ TResult propertyAttributePropertyCallback(
 }
 
 } // namespace
-
-int64 FCesiumPropertyAttributeProperty::getAccessorStride() const {
-  return propertyAttributePropertyCallback<int64>(
-      this->_property,
-      this->_valueType,
-      this->_normalized,
-      [](const auto& view) -> int64 { return view.accessorView().stride(); });
-}
-
-const std::byte* FCesiumPropertyAttributeProperty::getAccessorData() const {
-  return propertyAttributePropertyCallback<const std::byte*>(
-      this->_property,
-      this->_valueType,
-      this->_normalized,
-      [](const auto& view) -> const std::byte* {
-        return view.accessorView().data();
-      });
-}
 
 ECesiumPropertyAttributePropertyStatus
 UCesiumPropertyAttributePropertyBlueprintLibrary::

@@ -82,8 +82,8 @@ struct FCesiumGltfGaussianSplatData {
    * mesh primitive.
    */
   FCesiumGltfGaussianSplatData(
-      const CesiumGltf::Model& model,
-      const CesiumGltf::MeshPrimitive& meshPrimitive);
+      CesiumGltf::Model& model,
+      CesiumGltf::MeshPrimitive& meshPrimitive);
 };
 
 /**
