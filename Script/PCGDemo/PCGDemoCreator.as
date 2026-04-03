@@ -205,8 +205,6 @@ class APCGDemoCreator : AActor
                     meshComp.SetStaticMesh(entry.Mesh);
                     meshComp.SetWorldScale3D(entry.Scale);
                     meshComp.SetMobility(EComponentMobility::Movable);
-                    meshComp.RegisterComponent();
-                    spawned.SetRootComponent(meshComp);
                 }
                 spawned.AttachToActor(this, NAME_None, EAttachmentRule::KeepWorld);
                 SpawnedActors.Add(spawned);
@@ -317,8 +315,6 @@ class APCGDemoCreator : AActor
         meshComp.SetWorldRotation(Entry.Rotation);
         meshComp.SetWorldScale3D(Entry.Scale);
         meshComp.SetMobility(EComponentMobility::Movable);
-        meshComp.RegisterComponent();
-        spawned.SetRootComponent(meshComp);
 
         spawned.AttachToActor(this, NAME_None, EAttachmentRule::KeepWorld);
 
