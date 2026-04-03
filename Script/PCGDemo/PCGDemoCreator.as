@@ -181,19 +181,39 @@ class APCGDemoCreator : AActor
 
         Print("[PCGDemo] Total: " + PendingSpawns.Num() + " instances, spawning...");
 
-        // 同步生成全部
-        for (int i = 0; i < PendingSpawns.Num(); i++)
-        {
-            SpawnSingleInstance(PendingSpawns[i]);
+        Print("[PCGDemo] Starting spawn loop...");
 
-            // 每 100 个打印进度
-            if ((i + 1) % 100 == 0)
+        // 先只生成 3 个测试
+        int spawnCount = Math::Min(3, PendingSpawns.Num());
+        for (int i = 0; i < spawnCount; i++)
+        {
+            Print("[PCGDemo] Spawning #" + i);
+            FDemoSpawnEntry entry = PendingSpawns[i];
+            FVector loc = entry.Location;
+            Print("[PCGDemo]   loc=(" + loc.X + ", " + loc.Y + ", " + loc.Z + ")");
+            Print("[PCGDemo]   mesh=" + (entry.Mesh != nullptr ? "valid" : "NULL"));
+
+            AActor spawned = SpawnActor(AActor, loc, entry.Rotation);
+            Print("[PCGDemo]   SpawnActor=" + (spawned != nullptr ? "OK" : "FAILED"));
+
+            if (spawned != nullptr)
             {
-                Print("[PCGDemo] Spawned " + (i + 1) + "/" + PendingSpawns.Num());
+                UStaticMeshComponent meshComp = UStaticMeshComponent::Create(spawned);
+                Print("[PCGDemo]   MeshComp=" + (meshComp != nullptr ? "OK" : "FAILED"));
+                if (meshComp != nullptr && entry.Mesh != nullptr)
+                {
+                    meshComp.SetStaticMesh(entry.Mesh);
+                    meshComp.SetWorldScale3D(entry.Scale);
+                    meshComp.SetMobility(EComponentMobility::Movable);
+                    meshComp.RegisterComponent();
+                    spawned.SetRootComponent(meshComp);
+                }
+                spawned.AttachToActor(this, NAME_None, EAttachmentRule::KeepWorld);
+                SpawnedActors.Add(spawned);
             }
         }
 
-        Print("[PCGDemo] ===== GENERATION COMPLETE =====");
+        Print("[PCGDemo] ===== TEST COMPLETE =====");
         Print("[PCGDemo] " + SpawnedActors.Num() + " instances spawned.");
     }
 
