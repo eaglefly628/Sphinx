@@ -276,7 +276,7 @@ class APCGDemoCreator : AActor
     {
         FVector loc = Entry.Location;
 
-        // Ground trace
+        // Ground trace — 没命中则跳过（Cesium 瓦片未加载）
         if (bTraceToGround)
         {
             FVector traceStart = FVector(loc.X, loc.Y, loc.Z + TraceHeight);
@@ -289,6 +289,10 @@ class APCGDemoCreator : AActor
                 EDrawDebugTrace::None, hit, true))
             {
                 loc = hit.Location;
+            }
+            else
+            {
+                return; // 地面没加载，跳过此点
             }
         }
 
