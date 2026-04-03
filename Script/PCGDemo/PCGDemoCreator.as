@@ -276,7 +276,7 @@ class APCGDemoCreator : AActor
     {
         FVector loc = Entry.Location;
 
-        // Ground trace — 没命中则跳过（Cesium 瓦片未加载）
+        // Ground trace — 只接受 Cesium 地形（Static mobility），跳过已生成的 Actor
         if (bTraceToGround)
         {
             FVector traceStart = FVector(loc.X, loc.Y, loc.Z + TraceHeight);
@@ -284,15 +284,16 @@ class APCGDemoCreator : AActor
             FHitResult hit;
             TArray<AActor> ignore;
             ignore.Add(this);
-            for (AActor a : SpawnedActors)
-            {
-                if (a != nullptr)
-                    ignore.Add(a);
-            }
             if (System::LineTraceSingle(traceStart, traceEnd,
                 ETraceTypeQuery::Visibility, false, ignore,
                 EDrawDebugTrace::None, hit, true))
             {
+                // 检查命中的是不是地形（非我们生成的 Movable Actor）
+                UPrimitiveComponent hitComp = hit.Component;
+                if (hitComp != nullptr && hitComp.Mobility == EComponentMobility::Movable)
+                {
+                    return; // 打到了已生成的树/建筑，跳过
+                }
                 loc = hit.Location;
             }
             else
