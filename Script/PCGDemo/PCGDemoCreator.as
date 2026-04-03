@@ -313,6 +313,11 @@ class APCGDemoCreator : AActor
         UStaticMeshComponent meshComp = UStaticMeshComponent::Create(spawned);
         meshComp.SetStaticMesh(Entry.Mesh);
         meshComp.SetMobility(EComponentMobility::Movable);
+
+        // 禁用 billboard LOD，避免远处白色材质问题
+        meshComp.SetForcedLodModel(Math::Min(meshComp.GetStaticMesh().GetNumLODs(), 3));
+        meshComp.bNeverDistanceCull = true;
+
         spawned.SetRootComponent(meshComp);
 
         spawned.SetActorLocation(loc);
