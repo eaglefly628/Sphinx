@@ -284,6 +284,11 @@ class APCGDemoCreator : AActor
             FHitResult hit;
             TArray<AActor> ignore;
             ignore.Add(this);
+            for (AActor a : SpawnedActors)
+            {
+                if (a != nullptr)
+                    ignore.Add(a);
+            }
             if (System::LineTraceSingle(traceStart, traceEnd,
                 ETraceTypeQuery::Visibility, false, ignore,
                 EDrawDebugTrace::None, hit, true))
