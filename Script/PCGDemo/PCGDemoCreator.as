@@ -182,7 +182,7 @@ class APCGDemoCreator : AActor
         Print("[PCGDemo] Total: " + PendingSpawns.Num() + " instances");
         bIsGenerating = true;
 
-        System::SetTimer(this, "SpawnNextBatch", SpawnInterval, true);
+        System::SetTimer(this, n"SpawnNextBatch", SpawnInterval, true);
     }
 
     UFUNCTION(CallInEditor, Category = "PCG Demo")
