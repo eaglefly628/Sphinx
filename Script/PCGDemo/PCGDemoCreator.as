@@ -1,35 +1,27 @@
 // PCGDemoCreator.as — PCG 程序化生成演示 Actor
-// 放置到关卡中 → 配置 mesh → 点击 Generate → 渐进式生成树木和建筑
+// 放置到关卡中 → 配置 mesh → 点击 Generate → 编辑器同步生成全部
+// Play 时渐进式"长出来"展示过程
 // 纯 Demo 用途，删除此 Actor 即清除所有生成内容，不影响主体
 
-// ============================================================
-// 生成的单个实例数据
-// ============================================================
 struct FDemoSpawnEntry
 {
     FVector Location;
     FRotator Rotation;
     FVector Scale;
     UStaticMesh Mesh;
+    bool bIsBuilding = false;
 }
 
-// ============================================================
-// PCG Demo Creator
-// ============================================================
 class APCGDemoCreator : AActor
 {
-    // -------- 根组件 --------
     UPROPERTY(DefaultComponent, RootComponent)
     USceneComponent Root;
 
-    // -------- Outline Spline（编辑器中可见） --------
     UPROPERTY(DefaultComponent, Attach = Root)
     USplineComponent TreeOutlineSpline;
 
     UPROPERTY(DefaultComponent, Attach = Root)
     USplineComponent BuildingOutlineSpline;
-
-    // ======== 可配置参数 ========
 
     // ---- 树木区 ----
     UPROPERTY(EditAnywhere, Category = "PCG Demo|Tree Zone")
@@ -80,19 +72,23 @@ class APCGDemoCreator : AActor
 
     // ---- 生成控制 ----
     UPROPERTY(EditAnywhere, Category = "PCG Demo|Generation")
-    float SpawnInterval = 0.02f;
-
-    UPROPERTY(EditAnywhere, Category = "PCG Demo|Generation")
     bool bTraceToGround = true;
 
     UPROPERTY(EditAnywhere, Category = "PCG Demo|Generation")
     float TraceHeight = 100000.0f;
 
-    // ======== 内部状态 ========
+    // ---- Play 时渐进生成 ----
+    UPROPERTY(EditAnywhere, Category = "PCG Demo|Play Animation")
+    float GrowInterval = 0.05f; // 每个实例"长出来"的间隔（秒）
+
+    UPROPERTY(EditAnywhere, Category = "PCG Demo|Play Animation")
+    float GrowDuration = 0.5f; // 从 0 缩放到目标缩放的时间（秒）
+
+    // ---- 内部状态 ----
     private TArray<AActor> SpawnedActors;
-    private TArray<FDemoSpawnEntry> PendingSpawns;
-    private int CurrentSpawnIndex = 0;
-    private bool bIsGenerating = false;
+    private TArray<FVector> TargetScales; // 每个 Actor 的目标缩放
+    private int GrowIndex = 0;
+    private bool bIsGrowing = false;
 
     // ======== 构造 ========
     UFUNCTION(BlueprintOverride)
@@ -107,128 +103,74 @@ class APCGDemoCreator : AActor
         BuildOutlineSpline(BuildingOutlineSpline, BuildingZoneOffset, BuildingZoneRadius, BuildingOutlinePoints, BuildingRandomJitter);
     }
 
-    // ======== 编辑器按钮 ========
-
+    // ======== 编辑器按钮：同步全部生成 ========
     UFUNCTION(CallInEditor, Category = "PCG Demo")
     void Generate()
     {
-        if (bIsGenerating)
-        {
-            Print("[PCGDemo] Already generating, please wait...");
-            return;
-        }
-
         if (TreeMeshes.Num() == 0 && BuildingMeshes.Num() == 0)
         {
-            Print("[PCGDemo] ERROR: Please assign at least one mesh in TreeMeshes or BuildingMeshes!");
+            Print("[PCGDemo] ERROR: Assign meshes first!");
             return;
         }
 
         ClearGenerated();
-
         Print("[PCGDemo] ===== GENERATION START =====");
 
-        PendingSpawns.Empty();
-        CurrentSpawnIndex = 0;
+        TArray<FDemoSpawnEntry> allEntries;
 
-        // 树木区采样
+        // 树木区
         if (TreeMeshes.Num() > 0)
         {
-            TArray<FVector> treeOutline = GetSplinePolygonPoints(TreeOutlineSpline);
-            TArray<FVector> treePoints = SamplePointsInPolygon(treeOutline, TreeMinSpacing);
-            Print("[PCGDemo] Tree zone: " + treePoints.Num() + " points sampled");
-
-            for (int i = 0; i < treePoints.Num(); i++)
+            TArray<FVector> outline = GetSplinePolygonPoints(TreeOutlineSpline);
+            TArray<FVector> pts = SamplePointsInPolygon(outline, TreeMinSpacing);
+            Print("[PCGDemo] Trees: " + pts.Num() + " points");
+            for (int i = 0; i < pts.Num(); i++)
             {
-                FDemoSpawnEntry entry;
-                entry.Location = treePoints[i];
-                entry.Rotation = FRotator(0, Math::RandRange(0.0f, 360.0f), 0);
+                FDemoSpawnEntry e;
+                e.Location = pts[i];
+                e.Rotation = FRotator(0, Math::RandRange(0.0f, 360.0f), 0);
                 float s = Math::RandRange(TreeScaleRange.X, TreeScaleRange.Y);
-                entry.Scale = FVector(s, s, s);
-                entry.Mesh = TreeMeshes[Math::RandRange(0, TreeMeshes.Num() - 1)];
-                PendingSpawns.Add(entry);
+                e.Scale = FVector(s, s, s);
+                e.Mesh = TreeMeshes[Math::RandRange(0, TreeMeshes.Num() - 1)];
+                e.bIsBuilding = false;
+                allEntries.Add(e);
             }
         }
 
-        // 建筑区采样
+        // 建筑区
         if (BuildingMeshes.Num() > 0)
         {
-            TArray<FVector> buildOutline = GetSplinePolygonPoints(BuildingOutlineSpline);
-            TArray<FVector> buildPoints = SamplePointsInPolygon(buildOutline, BuildingSpacing);
-            Print("[PCGDemo] Building zone: " + buildPoints.Num() + " points sampled");
-
-            for (int i = 0; i < buildPoints.Num(); i++)
+            TArray<FVector> outline = GetSplinePolygonPoints(BuildingOutlineSpline);
+            TArray<FVector> pts = SamplePointsInPolygon(outline, BuildingSpacing);
+            Print("[PCGDemo] Buildings: " + pts.Num() + " points");
+            for (int i = 0; i < pts.Num(); i++)
             {
-                FDemoSpawnEntry entry;
-                entry.Location = buildPoints[i];
-                float yaw = float(Math::RandRange(0, 3)) * 90.0f;
-                entry.Rotation = FRotator(0, yaw, 0);
+                FDemoSpawnEntry e;
+                e.Location = pts[i];
+                e.Rotation = FRotator(0, float(Math::RandRange(0, 3)) * 90.0f, 0);
                 float sXY = Math::RandRange(BuildingScaleXYRange.X, BuildingScaleXYRange.Y);
                 float sZ = Math::RandRange(BuildingScaleZRange.X, BuildingScaleZRange.Y);
-                entry.Scale = FVector(sXY, sXY, sZ);
-                entry.Mesh = BuildingMeshes[Math::RandRange(0, BuildingMeshes.Num() - 1)];
-                PendingSpawns.Add(entry);
+                e.Scale = FVector(sXY, sXY, sZ);
+                e.Mesh = BuildingMeshes[Math::RandRange(0, BuildingMeshes.Num() - 1)];
+                e.bIsBuilding = true;
+                allEntries.Add(e);
             }
         }
 
-        if (PendingSpawns.Num() == 0)
+        // 同步生成全部（编辑器中）
+        for (int i = 0; i < allEntries.Num(); i++)
         {
-            Print("[PCGDemo] No points to spawn. Check outline size and spacing.");
-            return;
+            SpawnOneInstance(allEntries[i]);
         }
 
-        ShuffleSpawnList();
-
-        Print("[PCGDemo] Total: " + PendingSpawns.Num() + " instances, spawning...");
-
-        Print("[PCGDemo] Starting spawn loop...");
-
-        // 先只生成 3 个测试
-        int spawnCount = Math::Min(3, PendingSpawns.Num());
-        for (int i = 0; i < spawnCount; i++)
-        {
-            Print("[PCGDemo] Spawning #" + i);
-            FDemoSpawnEntry entry = PendingSpawns[i];
-            FVector loc = entry.Location;
-            Print("[PCGDemo]   loc=(" + loc.X + ", " + loc.Y + ", " + loc.Z + ")");
-            Print("[PCGDemo]   mesh=" + (entry.Mesh != nullptr ? "valid" : "NULL"));
-
-            AActor spawned = SpawnActor(AActor);
-            Print("[PCGDemo]   SpawnActor=" + (spawned != nullptr ? "OK" : "FAILED"));
-
-            if (spawned != nullptr)
-            {
-                // 先创建 MeshComponent 作为 RootComponent，否则 SetActorLocation 无效
-                UStaticMeshComponent meshComp = UStaticMeshComponent::Create(spawned);
-                Print("[PCGDemo]   MeshComp=" + (meshComp != nullptr ? "OK" : "FAILED"));
-                if (meshComp != nullptr && entry.Mesh != nullptr)
-                {
-                    meshComp.SetStaticMesh(entry.Mesh);
-                    meshComp.SetMobility(EComponentMobility::Movable);
-                }
-                spawned.SetRootComponent(meshComp);
-
-                // 有了 Root 才能设位置
-                spawned.SetActorLocation(loc);
-                spawned.SetActorRotation(entry.Rotation);
-                spawned.SetActorScale3D(entry.Scale);
-
-                SpawnedActors.Add(spawned);
-
-                FVector actualLoc = spawned.GetActorLocation();
-                Print("[PCGDemo]   actual pos=(" + actualLoc.X + ", " + actualLoc.Y + ", " + actualLoc.Z + ")");
-            }
-        }
-
-        Print("[PCGDemo] ===== TEST COMPLETE =====");
-        Print("[PCGDemo] " + SpawnedActors.Num() + " instances spawned.");
+        Print("[PCGDemo] ===== COMPLETE: " + SpawnedActors.Num() + " instances =====");
     }
 
     UFUNCTION(CallInEditor, Category = "PCG Demo")
     void Clear()
     {
         ClearGenerated();
-        Print("[PCGDemo] All generated content cleared.");
+        Print("[PCGDemo] Cleared.");
     }
 
     UFUNCTION(CallInEditor, Category = "PCG Demo")
@@ -239,160 +181,184 @@ class APCGDemoCreator : AActor
         Print("[PCGDemo] Outlines randomized.");
     }
 
-    // ======== 渐进式生成 ========
-
-    UFUNCTION()
-    void SpawnNextBatch()
+    // ======== Play 时渐进"长出来" ========
+    UFUNCTION(BlueprintOverride)
+    void BeginPlay()
     {
-        int batchSize = Math::Max(1, Math::CeilToInt(1.0f / (SpawnInterval * 30.0f)));
-        int endIndex = Math::Min(CurrentSpawnIndex + batchSize, PendingSpawns.Num());
+        if (SpawnedActors.Num() == 0)
+            return;
 
-        for (int i = CurrentSpawnIndex; i < endIndex; i++)
+        // 记录目标缩放，先全部缩为 0
+        TargetScales.Empty();
+        for (int i = 0; i < SpawnedActors.Num(); i++)
         {
-            SpawnSingleInstance(PendingSpawns[i]);
+            if (SpawnedActors[i] != nullptr)
+            {
+                TargetScales.Add(SpawnedActors[i].GetActorScale3D());
+                SpawnedActors[i].SetActorScale3D(FVector(0.01f, 0.01f, 0.01f));
+                SpawnedActors[i].SetActorHiddenInGame(false);
+            }
+            else
+            {
+                TargetScales.Add(FVector(1, 1, 1));
+            }
         }
 
-        CurrentSpawnIndex = endIndex;
+        GrowIndex = 0;
+        bIsGrowing = true;
+        Print("[PCGDemo] Play: growing " + SpawnedActors.Num() + " instances...");
+    }
 
-        // 进度日志（每 10% 打印一次）
-        float progressF = float(CurrentSpawnIndex) / float(PendingSpawns.Num()) * 100.0f;
-        int progress = Math::FloorToInt(progressF);
-        float prevF = float(CurrentSpawnIndex - batchSize) / float(PendingSpawns.Num()) * 100.0f;
-        int prevProgress = Math::FloorToInt(prevF);
-        if (Math::IntegerDivisionTrunc(progress, 10) > Math::IntegerDivisionTrunc(prevProgress, 10))
+    UFUNCTION(BlueprintOverride)
+    void Tick(float DeltaSeconds)
+    {
+        if (!bIsGrowing || SpawnedActors.Num() == 0)
+            return;
+
+        // 计算当前应该开始"长"的最大索引
+        float elapsed = Gameplay::GetTimeSeconds();
+        // 用简单计数：每 GrowInterval 秒启动下一个
+        int maxVisible = Math::Min(
+            Math::FloorToInt(Gameplay::GetTimeSeconds() / GrowInterval) + 1,
+            SpawnedActors.Num()
+        );
+
+        // 对已启动的实例做缩放动画
+        for (int i = 0; i < maxVisible; i++)
         {
-            Print("[PCGDemo] Progress: " + progress + "% (" + CurrentSpawnIndex + "/" + PendingSpawns.Num() + ")");
+            if (SpawnedActors[i] == nullptr)
+                continue;
+
+            FVector current = SpawnedActors[i].GetActorScale3D();
+            FVector target = TargetScales[i];
+
+            if (current.X < target.X * 0.99f)
+            {
+                // 平滑插值
+                float alpha = Math::Min(1.0f, DeltaSeconds / GrowDuration * 3.0f);
+                FVector newScale = Math::Lerp(current, target, alpha);
+                SpawnedActors[i].SetActorScale3D(newScale);
+            }
+            else if (current.X < target.X)
+            {
+                SpawnedActors[i].SetActorScale3D(target);
+            }
         }
 
-        if (CurrentSpawnIndex >= PendingSpawns.Num())
+        // 全部长完
+        if (maxVisible >= SpawnedActors.Num())
         {
-            System::ClearTimer(this, "SpawnNextBatch");
-            bIsGenerating = false;
-            Print("[PCGDemo] ===== GENERATION COMPLETE =====");
-            Print("[PCGDemo] " + SpawnedActors.Num() + " instances spawned.");
+            // 检查是否全部到达目标
+            bool allDone = true;
+            for (int i = 0; i < SpawnedActors.Num(); i++)
+            {
+                if (SpawnedActors[i] != nullptr)
+                {
+                    FVector c = SpawnedActors[i].GetActorScale3D();
+                    FVector t = TargetScales[i];
+                    if (c.X < t.X * 0.99f)
+                    {
+                        allDone = false;
+                        break;
+                    }
+                }
+            }
+            if (allDone)
+            {
+                bIsGrowing = false;
+                Print("[PCGDemo] All instances fully grown!");
+            }
         }
     }
 
-    // ======== 核心函数 ========
-
-    private void SpawnSingleInstance(FDemoSpawnEntry Entry)
+    // ======== Spawn 单个实例 ========
+    private void SpawnOneInstance(FDemoSpawnEntry Entry)
     {
-        FVector spawnLoc = Entry.Location;
+        FVector loc = Entry.Location;
 
+        // Ground trace
         if (bTraceToGround)
         {
-            FVector traceStart = FVector(spawnLoc.X, spawnLoc.Y, spawnLoc.Z + TraceHeight);
-            FVector traceEnd = FVector(spawnLoc.X, spawnLoc.Y, spawnLoc.Z - TraceHeight);
+            FVector traceStart = FVector(loc.X, loc.Y, loc.Z + TraceHeight);
+            FVector traceEnd = FVector(loc.X, loc.Y, loc.Z - TraceHeight);
             FHitResult hit;
             TArray<AActor> ignore;
             ignore.Add(this);
-
             if (System::LineTraceSingle(traceStart, traceEnd,
                 ETraceTypeQuery::Visibility, false, ignore,
                 EDrawDebugTrace::None, hit, true))
             {
-                spawnLoc = hit.Location;
+                loc = hit.Location;
             }
         }
 
-        // 调试：打印前 3 个实例的位置
-        if (SpawnedActors.Num() < 3)
-        {
-            Print("[PCGDemo] DEBUG spawn #" + SpawnedActors.Num()
-                + " at (" + spawnLoc.X + ", " + spawnLoc.Y + ", " + spawnLoc.Z + ")"
-                + " mesh=" + (Entry.Mesh != nullptr ? "valid" : "NULL"));
-        }
-
         if (Entry.Mesh == nullptr)
-        {
-            Print("[PCGDemo] ERROR: Mesh is null, skipping");
             return;
-        }
 
         AActor spawned = SpawnActor(AActor);
         if (spawned == nullptr)
-        {
-            if (SpawnedActors.Num() < 3)
-                Print("[PCGDemo] ERROR: SpawnActor returned null");
             return;
-        }
 
-        // 先创建 Root，再设位置
+        // 先建 Root，再设位置
         UStaticMeshComponent meshComp = UStaticMeshComponent::Create(spawned);
         meshComp.SetStaticMesh(Entry.Mesh);
         meshComp.SetMobility(EComponentMobility::Movable);
         spawned.SetRootComponent(meshComp);
 
-        spawned.SetActorLocation(spawnLoc);
+        spawned.SetActorLocation(loc);
         spawned.SetActorRotation(Entry.Rotation);
         spawned.SetActorScale3D(Entry.Scale);
 
+        // Outliner 中按类型分组标签
         #if EDITOR
-        spawned.SetActorLabel("PCGDemo_" + SpawnedActors.Num());
+        FString label = Entry.bIsBuilding ? "PCG_Building_" : "PCG_Tree_";
+        spawned.SetActorLabel(label + SpawnedActors.Num());
+        spawned.SetFolderPath(n"PCGDemo");
         #endif
 
         SpawnedActors.Add(spawned);
     }
 
+    // ======== 清理 ========
     private void ClearGenerated()
     {
-        if (bIsGenerating)
-        {
-            System::ClearTimer(this, "SpawnNextBatch");
-            bIsGenerating = false;
-        }
-
+        bIsGrowing = false;
         for (int i = SpawnedActors.Num() - 1; i >= 0; i--)
         {
             if (SpawnedActors[i] != nullptr)
-            {
                 SpawnedActors[i].DestroyActor();
-            }
         }
         SpawnedActors.Empty();
-        PendingSpawns.Empty();
-        CurrentSpawnIndex = 0;
+        TargetScales.Empty();
+        GrowIndex = 0;
     }
 
     // ======== Outline 构建 ========
-
     private void BuildOutlineSpline(USplineComponent Spline, FVector Offset, float Radius, int NumPoints, float Jitter)
     {
         Spline.ClearSplinePoints(false);
-
         for (int i = 0; i < NumPoints; i++)
         {
             float angle = (float(i) / float(NumPoints)) * 360.0f;
-            float jitteredRadius = Radius * (1.0f + Math::RandRange(-Jitter, Jitter));
+            float jR = Radius * (1.0f + Math::RandRange(-Jitter, Jitter));
             float rad = Math::DegreesToRadians(angle);
-
-            FVector point = FVector(
-                Math::Cos(rad) * jitteredRadius,
-                Math::Sin(rad) * jitteredRadius,
-                0
-            ) + Offset;
-
+            FVector point = FVector(Math::Cos(rad) * jR, Math::Sin(rad) * jR, 0) + Offset;
             Spline.AddSplinePointAtIndex(point, i, ESplineCoordinateSpace::Local, false);
         }
-
         Spline.SetClosedLoop(true, false);
         for (int i = 0; i < NumPoints; i++)
-        {
             Spline.SetSplinePointType(i, ESplinePointType::CurveCustomTangent, false);
-        }
         Spline.UpdateSpline();
     }
 
-    // ======== 多边形内采样 ========
-
+    // ======== 多边形采样 ========
     private TArray<FVector> GetSplinePolygonPoints(USplineComponent Spline)
     {
         TArray<FVector> points;
         FVector actorLoc = GetActorLocation();
-        int numPoints = Spline.GetNumberOfSplinePoints();
-        for (int i = 0; i < numPoints; i++)
+        int n = Spline.GetNumberOfSplinePoints();
+        for (int i = 0; i < n; i++)
         {
-            // 用 Local 坐标 + Actor 世界位置，避免 Cesium 坐标变换问题
             FVector localPt = Spline.GetLocationAtSplinePoint(i, ESplineCoordinateSpace::Local);
             points.Add(actorLoc + localPt);
         }
@@ -402,8 +368,7 @@ class APCGDemoCreator : AActor
     private TArray<FVector> SamplePointsInPolygon(TArray<FVector> Polygon, float Spacing)
     {
         TArray<FVector> results;
-        if (Polygon.Num() < 3)
-            return results;
+        if (Polygon.Num() < 3) return results;
 
         FVector bMin = Polygon[0];
         FVector bMax = Polygon[0];
@@ -415,72 +380,57 @@ class APCGDemoCreator : AActor
             bMax.Y = Math::Max(bMax.Y, Polygon[i].Y);
         }
 
-        float halfSpacing = Spacing * 0.4f;
+        float half = Spacing * 0.4f;
         for (float x = bMin.X; x <= bMax.X; x += Spacing)
         {
             for (float y = bMin.Y; y <= bMax.Y; y += Spacing)
             {
-                float jx = x + Math::RandRange(-halfSpacing, halfSpacing);
-                float jy = y + Math::RandRange(-halfSpacing, halfSpacing);
-                FVector candidate = FVector(jx, jy, bMin.Z);
-
-                if (IsPointInPolygon2D(candidate, Polygon))
-                {
-                    results.Add(candidate);
-                }
+                float jx = x + Math::RandRange(-half, half);
+                float jy = y + Math::RandRange(-half, half);
+                FVector c = FVector(jx, jy, bMin.Z);
+                if (IsPointInPolygon2D(c, Polygon))
+                    results.Add(c);
             }
         }
-
         return results;
     }
-
-    // ======== 点在多边形内测试 (Ray Casting) ========
 
     private bool IsPointInPolygon2D(FVector Point, TArray<FVector> Polygon)
     {
         int n = Polygon.Num();
         bool inside = false;
-
         int j = n - 1;
         for (int i = 0; i < n; i++)
         {
-            float yi = Polygon[i].Y;
-            float yj = Polygon[j].Y;
-            float xi = Polygon[i].X;
-            float xj = Polygon[j].X;
-
-            if (((yi > Point.Y) != (yj > Point.Y)) &&
-                (Point.X < (xj - xi) * (Point.Y - yi) / (yj - yi) + xi))
+            if (((Polygon[i].Y > Point.Y) != (Polygon[j].Y > Point.Y)) &&
+                (Point.X < (Polygon[j].X - Polygon[i].X) * (Point.Y - Polygon[i].Y)
+                 / (Polygon[j].Y - Polygon[i].Y) + Polygon[i].X))
             {
                 inside = !inside;
             }
             j = i;
         }
-
         return inside;
     }
 
-    // ======== 工具 ========
-
     private void ShuffleSpawnList()
     {
-        for (int i = PendingSpawns.Num() - 1; i > 0; i--)
+        for (int i = SpawnedActors.Num() - 1; i > 0; i--)
         {
             int j = Math::RandRange(0, i);
-            FDemoSpawnEntry temp = PendingSpawns[i];
-            PendingSpawns[i] = PendingSpawns[j];
-            PendingSpawns[j] = temp;
+            AActor temp = SpawnedActors[i];
+            SpawnedActors[i] = SpawnedActors[j];
+            SpawnedActors[j] = temp;
+            // 同步交换 TargetScales
+            FVector ts = TargetScales[i];
+            TargetScales[i] = TargetScales[j];
+            TargetScales[j] = ts;
         }
     }
-
-    // ======== 清理保障 ========
 
     UFUNCTION(BlueprintOverride)
     void EndPlay(EEndPlayReason Reason)
     {
-        if (bIsGenerating)
-        {
-            System::ClearTimer(this, "SpawnNextBatch");
-        }
+        bIsGrowing = false;
     }
 }
