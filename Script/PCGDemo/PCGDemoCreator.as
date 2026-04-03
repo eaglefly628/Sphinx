@@ -198,17 +198,21 @@ class APCGDemoCreator : AActor
 
             if (spawned != nullptr)
             {
-                spawned.SetActorLocation(loc);
-                spawned.SetActorRotation(entry.Rotation);
-
+                // 先创建 MeshComponent 作为 RootComponent，否则 SetActorLocation 无效
                 UStaticMeshComponent meshComp = UStaticMeshComponent::Create(spawned);
                 Print("[PCGDemo]   MeshComp=" + (meshComp != nullptr ? "OK" : "FAILED"));
                 if (meshComp != nullptr && entry.Mesh != nullptr)
                 {
                     meshComp.SetStaticMesh(entry.Mesh);
-                    meshComp.SetWorldScale3D(entry.Scale);
                     meshComp.SetMobility(EComponentMobility::Movable);
                 }
+                spawned.SetRootComponent(meshComp);
+
+                // 有了 Root 才能设位置
+                spawned.SetActorLocation(loc);
+                spawned.SetActorRotation(entry.Rotation);
+                spawned.SetActorScale3D(entry.Scale);
+
                 SpawnedActors.Add(spawned);
 
                 FVector actualLoc = spawned.GetActorLocation();
@@ -313,16 +317,15 @@ class APCGDemoCreator : AActor
             return;
         }
 
-        spawned.SetActorLocation(spawnLoc);
-        spawned.SetActorRotation(Entry.Rotation);
-
+        // 先创建 Root，再设位置
         UStaticMeshComponent meshComp = UStaticMeshComponent::Create(spawned);
         meshComp.SetStaticMesh(Entry.Mesh);
-        meshComp.SetWorldRotation(Entry.Rotation);
-        meshComp.SetWorldScale3D(Entry.Scale);
         meshComp.SetMobility(EComponentMobility::Movable);
+        spawned.SetRootComponent(meshComp);
 
-        spawned.AttachToActor(this, NAME_None, EAttachmentRule::KeepWorld);
+        spawned.SetActorLocation(spawnLoc);
+        spawned.SetActorRotation(Entry.Rotation);
+        spawned.SetActorScale3D(Entry.Scale);
 
         #if EDITOR
         spawned.SetActorLabel("PCGDemo_" + SpawnedActors.Num());
