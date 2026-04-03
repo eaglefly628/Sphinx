@@ -33,7 +33,7 @@ class APCGDemoCreator : AActor
 
     // ---- 树木区 ----
     UPROPERTY(EditAnywhere, Category = "PCG Demo|Tree Zone")
-    float TreeZoneRadius = 30000.0f; // 300m (cm)
+    float TreeZoneRadius = 30000.0f;
 
     UPROPERTY(EditAnywhere, Category = "PCG Demo|Tree Zone")
     FVector TreeZoneOffset = FVector(0, 0, 0);
@@ -42,26 +42,23 @@ class APCGDemoCreator : AActor
     int TreeOutlinePoints = 8;
 
     UPROPERTY(EditAnywhere, Category = "PCG Demo|Tree Zone")
-    float TreeRandomJitter = 0.3f; // outline 顶点随机扰动比例
+    float TreeRandomJitter = 0.3f;
 
     UPROPERTY(EditAnywhere, Category = "PCG Demo|Tree Zone")
     TArray<UStaticMesh> TreeMeshes;
 
-    UPROPERTY(EditAnywhere, Category = "PCG Demo|Tree Zone", Meta = (ClampMin = "0.001", ClampMax = "1.0"))
-    float TreeDensity = 0.03f; // 每平米棵数
-
-    UPROPERTY(EditAnywhere, Category = "PCG Demo|Tree Zone", Meta = (ClampMin = "100", ClampMax = "5000"))
-    float TreeMinSpacing = 500.0f; // 最小间距 5m (cm)
+    UPROPERTY(EditAnywhere, Category = "PCG Demo|Tree Zone")
+    float TreeMinSpacing = 500.0f;
 
     UPROPERTY(EditAnywhere, Category = "PCG Demo|Tree Zone")
     FVector2D TreeScaleRange = FVector2D(0.7f, 1.4f);
 
     // ---- 建筑区 ----
     UPROPERTY(EditAnywhere, Category = "PCG Demo|Building Zone")
-    float BuildingZoneRadius = 20000.0f; // 200m (cm)
+    float BuildingZoneRadius = 20000.0f;
 
     UPROPERTY(EditAnywhere, Category = "PCG Demo|Building Zone")
-    FVector BuildingZoneOffset = FVector(50000, 0, 0); // 默认偏移 500m
+    FVector BuildingZoneOffset = FVector(50000, 0, 0);
 
     UPROPERTY(EditAnywhere, Category = "PCG Demo|Building Zone")
     int BuildingOutlinePoints = 6;
@@ -72,8 +69,8 @@ class APCGDemoCreator : AActor
     UPROPERTY(EditAnywhere, Category = "PCG Demo|Building Zone")
     TArray<UStaticMesh> BuildingMeshes;
 
-    UPROPERTY(EditAnywhere, Category = "PCG Demo|Building Zone", Meta = (ClampMin = "1000", ClampMax = "10000"))
-    float BuildingSpacing = 3000.0f; // 30m (cm)
+    UPROPERTY(EditAnywhere, Category = "PCG Demo|Building Zone")
+    float BuildingSpacing = 3000.0f;
 
     UPROPERTY(EditAnywhere, Category = "PCG Demo|Building Zone")
     FVector2D BuildingScaleXYRange = FVector2D(0.8f, 1.2f);
@@ -82,14 +79,14 @@ class APCGDemoCreator : AActor
     FVector2D BuildingScaleZRange = FVector2D(0.8f, 1.5f);
 
     // ---- 生成控制 ----
-    UPROPERTY(EditAnywhere, Category = "PCG Demo|Generation", Meta = (ClampMin = "0.005", ClampMax = "0.5"))
-    float SpawnInterval = 0.02f; // 渐进生成间隔（秒/个）
+    UPROPERTY(EditAnywhere, Category = "PCG Demo|Generation")
+    float SpawnInterval = 0.02f;
 
     UPROPERTY(EditAnywhere, Category = "PCG Demo|Generation")
-    bool bTraceToGround = true; // Line Trace 投影到地面
+    bool bTraceToGround = true;
 
-    UPROPERTY(EditAnywhere, Category = "PCG Demo|Generation", Meta = (ClampMin = "10000", ClampMax = "500000"))
-    float TraceHeight = 100000.0f; // Line Trace 起始高度 1000m (cm)
+    UPROPERTY(EditAnywhere, Category = "PCG Demo|Generation")
+    float TraceHeight = 100000.0f;
 
     // ======== 内部状态 ========
     private TArray<AActor> SpawnedActors;
@@ -101,13 +98,11 @@ class APCGDemoCreator : AActor
     UFUNCTION(BlueprintOverride)
     void ConstructionScript()
     {
-        // 设置 Spline 外观
         TreeOutlineSpline.SetDrawDebug(true);
-        TreeOutlineSpline.SetUnselectedSplineSegmentColor(FLinearColor(0.1f, 0.8f, 0.2f, 1.0f)); // 绿色
+        TreeOutlineSpline.SetUnselectedSplineSegmentColor(FLinearColor(0.1f, 0.8f, 0.2f, 1.0f));
         BuildingOutlineSpline.SetDrawDebug(true);
-        BuildingOutlineSpline.SetUnselectedSplineSegmentColor(FLinearColor(0.9f, 0.6f, 0.1f, 1.0f)); // 橙色
+        BuildingOutlineSpline.SetUnselectedSplineSegmentColor(FLinearColor(0.9f, 0.6f, 0.1f, 1.0f));
 
-        // 构建 outline
         BuildOutlineSpline(TreeOutlineSpline, TreeZoneOffset, TreeZoneRadius, TreeOutlinePoints, TreeRandomJitter);
         BuildOutlineSpline(BuildingOutlineSpline, BuildingZoneOffset, BuildingZoneRadius, BuildingOutlinePoints, BuildingRandomJitter);
     }
@@ -129,12 +124,10 @@ class APCGDemoCreator : AActor
             return;
         }
 
-        // 清除旧的
         ClearGenerated();
 
         Print("[PCGDemo] ===== GENERATION START =====");
 
-        // 收集所有待生成点
         PendingSpawns.Empty();
         CurrentSpawnIndex = 0;
 
@@ -149,10 +142,10 @@ class APCGDemoCreator : AActor
             {
                 FDemoSpawnEntry entry;
                 entry.Location = treePoints[i];
-                entry.Rotation = FRotator(0, FMath::RandRange(0.0f, 360.0f), 0);
-                float s = FMath::RandRange(TreeScaleRange.X, TreeScaleRange.Y);
+                entry.Rotation = FRotator(0, Math::RandRange(0.0f, 360.0f), 0);
+                float s = Math::RandRange(TreeScaleRange.X, TreeScaleRange.Y);
                 entry.Scale = FVector(s, s, s);
-                entry.Mesh = TreeMeshes[FMath::RandRange(0, TreeMeshes.Num() - 1)];
+                entry.Mesh = TreeMeshes[Math::RandRange(0, TreeMeshes.Num() - 1)];
                 PendingSpawns.Add(entry);
             }
         }
@@ -168,13 +161,12 @@ class APCGDemoCreator : AActor
             {
                 FDemoSpawnEntry entry;
                 entry.Location = buildPoints[i];
-                // 正交朝向: 0/90/180/270
-                float yaw = float(FMath::RandRange(0, 3)) * 90.0f;
+                float yaw = float(Math::RandRange(0, 3)) * 90.0f;
                 entry.Rotation = FRotator(0, yaw, 0);
-                float sXY = FMath::RandRange(BuildingScaleXYRange.X, BuildingScaleXYRange.Y);
-                float sZ = FMath::RandRange(BuildingScaleZRange.X, BuildingScaleZRange.Y);
+                float sXY = Math::RandRange(BuildingScaleXYRange.X, BuildingScaleXYRange.Y);
+                float sZ = Math::RandRange(BuildingScaleZRange.X, BuildingScaleZRange.Y);
                 entry.Scale = FVector(sXY, sXY, sZ);
-                entry.Mesh = BuildingMeshes[FMath::RandRange(0, BuildingMeshes.Num() - 1)];
+                entry.Mesh = BuildingMeshes[Math::RandRange(0, BuildingMeshes.Num() - 1)];
                 PendingSpawns.Add(entry);
             }
         }
@@ -185,14 +177,12 @@ class APCGDemoCreator : AActor
             return;
         }
 
-        // 随机打乱顺序（混合树木和建筑，视觉更好）
         ShuffleSpawnList();
 
-        Print("[PCGDemo] Total: " + PendingSpawns.Num() + " instances, generating at " + SpawnInterval + "s intervals...");
+        Print("[PCGDemo] Total: " + PendingSpawns.Num() + " instances");
         bIsGenerating = true;
 
-        // 启动渐进式生成 Timer
-        System::SetTimer(this, n"SpawnNextBatch", SpawnInterval, true);
+        System::SetTimer(this, "SpawnNextBatch", SpawnInterval, true);
     }
 
     UFUNCTION(CallInEditor, Category = "PCG Demo")
@@ -213,10 +203,10 @@ class APCGDemoCreator : AActor
     // ======== 渐进式生成 ========
 
     UFUNCTION()
-    private void SpawnNextBatch()
+    void SpawnNextBatch()
     {
-        int batchSize = FMath::Max(1, FMath::CeilToInt(1.0f / (SpawnInterval * 30.0f)));
-        int endIndex = FMath::Min(CurrentSpawnIndex + batchSize, PendingSpawns.Num());
+        int batchSize = Math::Max(1, Math::CeilToInt(1.0f / (SpawnInterval * 30.0f)));
+        int endIndex = Math::Min(CurrentSpawnIndex + batchSize, PendingSpawns.Num());
 
         for (int i = CurrentSpawnIndex; i < endIndex; i++)
         {
@@ -226,16 +216,18 @@ class APCGDemoCreator : AActor
         CurrentSpawnIndex = endIndex;
 
         // 进度日志（每 10% 打印一次）
-        int progress = FMath::FloorToInt(float(CurrentSpawnIndex) / float(PendingSpawns.Num()) * 100.0f);
-        int prevProgress = FMath::FloorToInt(float(CurrentSpawnIndex - batchSize) / float(PendingSpawns.Num()) * 100.0f);
-        if (progress / 10 > prevProgress / 10)
+        float progressF = float(CurrentSpawnIndex) / float(PendingSpawns.Num()) * 100.0f;
+        int progress = Math::FloorToInt(progressF);
+        float prevF = float(CurrentSpawnIndex - batchSize) / float(PendingSpawns.Num()) * 100.0f;
+        int prevProgress = Math::FloorToInt(prevF);
+        if (Math::IntegerDivisionTrunc(progress, 10) > Math::IntegerDivisionTrunc(prevProgress, 10))
         {
             Print("[PCGDemo] Progress: " + progress + "% (" + CurrentSpawnIndex + "/" + PendingSpawns.Num() + ")");
         }
 
         if (CurrentSpawnIndex >= PendingSpawns.Num())
         {
-            System::ClearTimer(this, n"SpawnNextBatch");
+            System::ClearTimer(this, "SpawnNextBatch");
             bIsGenerating = false;
             Print("[PCGDemo] ===== GENERATION COMPLETE =====");
             Print("[PCGDemo] " + SpawnedActors.Num() + " instances spawned.");
@@ -244,7 +236,7 @@ class APCGDemoCreator : AActor
 
     // ======== 核心函数 ========
 
-    private void SpawnSingleInstance(const FDemoSpawnEntry& Entry)
+    private void SpawnSingleInstance(FDemoSpawnEntry Entry)
     {
         FVector spawnLoc = Entry.Location;
 
@@ -293,7 +285,7 @@ class APCGDemoCreator : AActor
     {
         if (bIsGenerating)
         {
-            System::ClearTimer(this, n"SpawnNextBatch");
+            System::ClearTimer(this, "SpawnNextBatch");
             bIsGenerating = false;
         }
 
@@ -318,12 +310,12 @@ class APCGDemoCreator : AActor
         for (int i = 0; i < NumPoints; i++)
         {
             float angle = (float(i) / float(NumPoints)) * 360.0f;
-            float jitteredRadius = Radius * (1.0f + FMath::RandRange(-Jitter, Jitter));
-            float rad = FMath::DegreesToRadians(angle);
+            float jitteredRadius = Radius * (1.0f + Math::RandRange(-Jitter, Jitter));
+            float rad = Math::DegreesToRadians(angle);
 
             FVector point = FVector(
-                FMath::Cos(rad) * jitteredRadius,
-                FMath::Sin(rad) * jitteredRadius,
+                Math::Cos(rad) * jitteredRadius,
+                Math::Sin(rad) * jitteredRadius,
                 0
             ) + Offset;
 
@@ -351,7 +343,7 @@ class APCGDemoCreator : AActor
         return points;
     }
 
-    private TArray<FVector> SamplePointsInPolygon(const TArray<FVector>& Polygon, float Spacing)
+    private TArray<FVector> SamplePointsInPolygon(TArray<FVector> Polygon, float Spacing)
     {
         TArray<FVector> results;
         if (Polygon.Num() < 3)
@@ -361,10 +353,10 @@ class APCGDemoCreator : AActor
         FVector bMax = Polygon[0];
         for (int i = 1; i < Polygon.Num(); i++)
         {
-            bMin.X = FMath::Min(bMin.X, Polygon[i].X);
-            bMin.Y = FMath::Min(bMin.Y, Polygon[i].Y);
-            bMax.X = FMath::Max(bMax.X, Polygon[i].X);
-            bMax.Y = FMath::Max(bMax.Y, Polygon[i].Y);
+            bMin.X = Math::Min(bMin.X, Polygon[i].X);
+            bMin.Y = Math::Min(bMin.Y, Polygon[i].Y);
+            bMax.X = Math::Max(bMax.X, Polygon[i].X);
+            bMax.Y = Math::Max(bMax.Y, Polygon[i].Y);
         }
 
         float halfSpacing = Spacing * 0.4f;
@@ -372,8 +364,8 @@ class APCGDemoCreator : AActor
         {
             for (float y = bMin.Y; y <= bMax.Y; y += Spacing)
             {
-                float jx = x + FMath::RandRange(-halfSpacing, halfSpacing);
-                float jy = y + FMath::RandRange(-halfSpacing, halfSpacing);
+                float jx = x + Math::RandRange(-halfSpacing, halfSpacing);
+                float jy = y + Math::RandRange(-halfSpacing, halfSpacing);
                 FVector candidate = FVector(jx, jy, bMin.Z);
 
                 if (IsPointInPolygon2D(candidate, Polygon))
@@ -388,7 +380,7 @@ class APCGDemoCreator : AActor
 
     // ======== 点在多边形内测试 (Ray Casting) ========
 
-    private bool IsPointInPolygon2D(const FVector& Point, const TArray<FVector>& Polygon)
+    private bool IsPointInPolygon2D(FVector Point, TArray<FVector> Polygon)
     {
         int n = Polygon.Num();
         bool inside = false;
@@ -418,7 +410,7 @@ class APCGDemoCreator : AActor
     {
         for (int i = PendingSpawns.Num() - 1; i > 0; i--)
         {
-            int j = FMath::RandRange(0, i);
+            int j = Math::RandRange(0, i);
             FDemoSpawnEntry temp = PendingSpawns[i];
             PendingSpawns[i] = PendingSpawns[j];
             PendingSpawns[j] = temp;
@@ -432,7 +424,7 @@ class APCGDemoCreator : AActor
     {
         if (bIsGenerating)
         {
-            System::ClearTimer(this, n"SpawnNextBatch");
+            System::ClearTimer(this, "SpawnNextBatch");
         }
     }
 }
