@@ -193,11 +193,14 @@ class APCGDemoCreator : AActor
             Print("[PCGDemo]   loc=(" + loc.X + ", " + loc.Y + ", " + loc.Z + ")");
             Print("[PCGDemo]   mesh=" + (entry.Mesh != nullptr ? "valid" : "NULL"));
 
-            AActor spawned = SpawnActor(AActor, loc, entry.Rotation);
+            AActor spawned = SpawnActor(AActor);
             Print("[PCGDemo]   SpawnActor=" + (spawned != nullptr ? "OK" : "FAILED"));
 
             if (spawned != nullptr)
             {
+                spawned.SetActorLocation(loc);
+                spawned.SetActorRotation(entry.Rotation);
+
                 UStaticMeshComponent meshComp = UStaticMeshComponent::Create(spawned);
                 Print("[PCGDemo]   MeshComp=" + (meshComp != nullptr ? "OK" : "FAILED"));
                 if (meshComp != nullptr && entry.Mesh != nullptr)
@@ -206,8 +209,10 @@ class APCGDemoCreator : AActor
                     meshComp.SetWorldScale3D(entry.Scale);
                     meshComp.SetMobility(EComponentMobility::Movable);
                 }
-                spawned.AttachToActor(this, NAME_None, EAttachmentRule::KeepWorld);
                 SpawnedActors.Add(spawned);
+
+                FVector actualLoc = spawned.GetActorLocation();
+                Print("[PCGDemo]   actual pos=(" + actualLoc.X + ", " + actualLoc.Y + ", " + actualLoc.Z + ")");
             }
         }
 
@@ -300,8 +305,7 @@ class APCGDemoCreator : AActor
             return;
         }
 
-        // 用 ISMC 方式：直接创建带 StaticMeshComponent 的 Actor
-        AActor spawned = SpawnActor(AActor, spawnLoc, Entry.Rotation);
+        AActor spawned = SpawnActor(AActor);
         if (spawned == nullptr)
         {
             if (SpawnedActors.Num() < 3)
@@ -309,9 +313,11 @@ class APCGDemoCreator : AActor
             return;
         }
 
+        spawned.SetActorLocation(spawnLoc);
+        spawned.SetActorRotation(Entry.Rotation);
+
         UStaticMeshComponent meshComp = UStaticMeshComponent::Create(spawned);
         meshComp.SetStaticMesh(Entry.Mesh);
-        meshComp.SetWorldLocation(spawnLoc);
         meshComp.SetWorldRotation(Entry.Rotation);
         meshComp.SetWorldScale3D(Entry.Scale);
         meshComp.SetMobility(EComponentMobility::Movable);
