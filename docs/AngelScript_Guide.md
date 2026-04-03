@@ -42,6 +42,52 @@ Gameplay::GetAllActorsOfClass(AActor::StaticClass(), OutActors);
 ```
 > commit b282d3d: 签名是 `(TSubclassOf<AActor>, TArray<AActor>&)`，不能省略
 
+### AS-4: `FMath` 命名空间不存在，用 `Math`
+```angelscript
+// ❌ C++ 风格
+float s = FMath::RandRange(0.0f, 1.0f);
+int n = FMath::Min(a, b);
+float rad = FMath::DegreesToRadians(angle);
+
+// ✅ AngelScript 用 Math 命名空间
+float s = Math::RandRange(0.0f, 1.0f);
+int n = Math::Min(a, b);
+float rad = Math::DegreesToRadians(angle);
+```
+> commit 00ce7d5: PCGDemoCreator.as 全部 FMath → Math
+
+### AS-5: `SetTimer` / `ClearTimer` 接受 FString，不是 FName
+```angelscript
+// ❌ n"name" 是 FName
+System::SetTimer(this, n"MyFunc", 0.1f, true);
+System::ClearTimer(this, n"MyFunc");
+
+// ✅ 用 FString
+System::SetTimer(this, "MyFunc", 0.1f, true);
+System::ClearTimer(this, "MyFunc");
+```
+> commit 00ce7d5: Timer 函数签名是 `(UObject, FString, float, bool)`
+
+### AS-6: 函数参数不支持 `const ref` 自定义 struct
+```angelscript
+// ❌ 编译器不识别 const ref
+void Foo(const FMyStruct& S) { ... }
+
+// ✅ 值传递
+void Foo(FMyStruct S) { ... }
+```
+> commit 00ce7d5: SpawnSingleInstance / SamplePointsInPolygon 参数改值传递
+
+### AS-7: 整数除法精度警告
+```angelscript
+// ❌ 整数除法会截断，编译器警告
+if (progress / 10 > prev / 10) ...
+
+// ✅ 显式用 IntegerDivisionTrunc
+if (Math::IntegerDivisionTrunc(progress, 10) > Math::IntegerDivisionTrunc(prev, 10)) ...
+```
+> commit 00ce7d5: 避免隐式整数截断
+
 ## C++ 侧实际踩过的坑（写插件 C++ 时注意）
 
 ### CPP-1: 废弃 API
