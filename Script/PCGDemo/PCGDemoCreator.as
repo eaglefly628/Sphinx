@@ -379,10 +379,13 @@ class APCGDemoCreator : AActor
     private TArray<FVector> GetSplinePolygonPoints(USplineComponent Spline)
     {
         TArray<FVector> points;
+        FVector actorLoc = GetActorLocation();
         int numPoints = Spline.GetNumberOfSplinePoints();
         for (int i = 0; i < numPoints; i++)
         {
-            points.Add(Spline.GetLocationAtSplinePoint(i, ESplineCoordinateSpace::World));
+            // 用 Local 坐标 + Actor 世界位置，避免 Cesium 坐标变换问题
+            FVector localPt = Spline.GetLocationAtSplinePoint(i, ESplineCoordinateSpace::Local);
+            points.Add(actorLoc + localPt);
         }
         return points;
     }
