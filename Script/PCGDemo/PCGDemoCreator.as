@@ -179,10 +179,22 @@ class APCGDemoCreator : AActor
 
         ShuffleSpawnList();
 
-        Print("[PCGDemo] Total: " + PendingSpawns.Num() + " instances");
-        bIsGenerating = true;
+        Print("[PCGDemo] Total: " + PendingSpawns.Num() + " instances, spawning...");
 
-        System::SetTimer(this, n"SpawnNextBatch", SpawnInterval, true);
+        // 同步生成全部
+        for (int i = 0; i < PendingSpawns.Num(); i++)
+        {
+            SpawnSingleInstance(PendingSpawns[i]);
+
+            // 每 100 个打印进度
+            if ((i + 1) % 100 == 0)
+            {
+                Print("[PCGDemo] Spawned " + (i + 1) + "/" + PendingSpawns.Num());
+            }
+        }
+
+        Print("[PCGDemo] ===== GENERATION COMPLETE =====");
+        Print("[PCGDemo] " + SpawnedActors.Num() + " instances spawned.");
     }
 
     UFUNCTION(CallInEditor, Category = "PCG Demo")
@@ -247,11 +259,6 @@ class APCGDemoCreator : AActor
             FHitResult hit;
             TArray<AActor> ignore;
             ignore.Add(this);
-            for (AActor a : SpawnedActors)
-            {
-                if (a != nullptr)
-                    ignore.Add(a);
-            }
 
             if (System::LineTraceSingle(traceStart, traceEnd,
                 ETraceTypeQuery::Visibility, false, ignore,
@@ -261,22 +268,43 @@ class APCGDemoCreator : AActor
             }
         }
 
-        AActor spawned = SpawnActor(AStaticMeshActor, spawnLoc, Entry.Rotation);
-        if (spawned == nullptr)
-            return;
-
-        AStaticMeshActor meshActor = Cast<AStaticMeshActor>(spawned);
-        if (meshActor != nullptr)
+        // 调试：打印前 3 个实例的位置
+        if (SpawnedActors.Num() < 3)
         {
-            meshActor.StaticMeshComponent.SetStaticMesh(Entry.Mesh);
-            meshActor.SetActorScale3D(Entry.Scale);
-            meshActor.SetMobility(EComponentMobility::Movable);
-            meshActor.AttachToActor(this, NAME_None, EAttachmentRule::KeepWorld);
-
-            #if EDITOR
-            meshActor.SetActorLabel("PCGDemo_" + SpawnedActors.Num());
-            #endif
+            Print("[PCGDemo] DEBUG spawn #" + SpawnedActors.Num()
+                + " at (" + spawnLoc.X + ", " + spawnLoc.Y + ", " + spawnLoc.Z + ")"
+                + " mesh=" + (Entry.Mesh != nullptr ? "valid" : "NULL"));
         }
+
+        if (Entry.Mesh == nullptr)
+        {
+            Print("[PCGDemo] ERROR: Mesh is null, skipping");
+            return;
+        }
+
+        // 用 ISMC 方式：直接创建带 StaticMeshComponent 的 Actor
+        AActor spawned = SpawnActor(AActor, spawnLoc, Entry.Rotation);
+        if (spawned == nullptr)
+        {
+            if (SpawnedActors.Num() < 3)
+                Print("[PCGDemo] ERROR: SpawnActor returned null");
+            return;
+        }
+
+        UStaticMeshComponent meshComp = UStaticMeshComponent::Create(spawned);
+        meshComp.SetStaticMesh(Entry.Mesh);
+        meshComp.SetWorldLocation(spawnLoc);
+        meshComp.SetWorldRotation(Entry.Rotation);
+        meshComp.SetWorldScale3D(Entry.Scale);
+        meshComp.SetMobility(EComponentMobility::Movable);
+        meshComp.RegisterComponent();
+        spawned.SetRootComponent(meshComp);
+
+        spawned.AttachToActor(this, NAME_None, EAttachmentRule::KeepWorld);
+
+        #if EDITOR
+        spawned.SetActorLabel("PCGDemo_" + SpawnedActors.Num());
+        #endif
 
         SpawnedActors.Add(spawned);
     }
