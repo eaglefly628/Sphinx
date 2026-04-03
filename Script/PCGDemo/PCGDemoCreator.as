@@ -89,6 +89,7 @@ class APCGDemoCreator : AActor
     private TArray<FVector> TargetScales; // 每个 Actor 的目标缩放
     private int GrowIndex = 0;
     private bool bIsGrowing = false;
+    private float GrowStartTime = 0;
 
     // ======== 构造 ========
     UFUNCTION(BlueprintOverride)
@@ -185,26 +186,48 @@ class APCGDemoCreator : AActor
     UFUNCTION(BlueprintOverride)
     void BeginPlay()
     {
-        if (SpawnedActors.Num() == 0)
-            return;
-
-        // 记录目标缩放，先全部缩为 0
+        // 运行时 SpawnedActors 数组是空的（编辑器状态不保留）
+        // 通过 PCGDemo folder 收集所有生成的 Actor
+        SpawnedActors.Empty();
         TargetScales.Empty();
-        for (int i = 0; i < SpawnedActors.Num(); i++)
+
+        TArray<AActor> allActors;
+        Gameplay::GetAllActorsOfClass(AActor, allActors);
+        for (AActor a : allActors)
         {
-            if (SpawnedActors[i] != nullptr)
+            if (a == this || a == nullptr)
+                continue;
+            // 检查是否在 PCGDemo folder 下
+            FName folder = a.GetFolderPath();
+            if (folder == n"PCGDemo")
             {
-                TargetScales.Add(SpawnedActors[i].GetActorScale3D());
-                SpawnedActors[i].SetActorScale3D(FVector(0.01f, 0.01f, 0.01f));
-                SpawnedActors[i].SetActorHiddenInGame(false);
-            }
-            else
-            {
-                TargetScales.Add(FVector(1, 1, 1));
+                SpawnedActors.Add(a);
             }
         }
 
-        GrowIndex = 0;
+        if (SpawnedActors.Num() == 0)
+        {
+            Print("[PCGDemo] No instances found. Generate in editor first.");
+            return;
+        }
+
+        // 随机打乱顺序让"长出来"更自然
+        for (int i = SpawnedActors.Num() - 1; i > 0; i--)
+        {
+            int j = Math::RandRange(0, i);
+            AActor temp = SpawnedActors[i];
+            SpawnedActors[i] = SpawnedActors[j];
+            SpawnedActors[j] = temp;
+        }
+
+        // 记录目标缩放，全部缩为 0
+        for (int i = 0; i < SpawnedActors.Num(); i++)
+        {
+            TargetScales.Add(SpawnedActors[i].GetActorScale3D());
+            SpawnedActors[i].SetActorScale3D(FVector(0.01f, 0.01f, 0.01f));
+        }
+
+        GrowStartTime = Gameplay::GetTimeSeconds();
         bIsGrowing = true;
         Print("[PCGDemo] Play: growing " + SpawnedActors.Num() + " instances...");
     }
@@ -215,11 +238,10 @@ class APCGDemoCreator : AActor
         if (!bIsGrowing || SpawnedActors.Num() == 0)
             return;
 
-        // 计算当前应该开始"长"的最大索引
-        float elapsed = Gameplay::GetTimeSeconds();
-        // 用简单计数：每 GrowInterval 秒启动下一个
+        // 从 BeginPlay 开始计时，每 GrowInterval 秒启动下一个
+        float elapsed = Gameplay::GetTimeSeconds() - GrowStartTime;
         int maxVisible = Math::Min(
-            Math::FloorToInt(Gameplay::GetTimeSeconds() / GrowInterval) + 1,
+            Math::FloorToInt(elapsed / GrowInterval) + 1,
             SpawnedActors.Num()
         );
 
@@ -314,9 +336,12 @@ class APCGDemoCreator : AActor
         meshComp.SetStaticMesh(Entry.Mesh);
         meshComp.SetMobility(EComponentMobility::Movable);
 
-        // 禁用 billboard LOD，避免远处白色材质问题
-        meshComp.SetForcedLodModel(Math::Min(meshComp.GetStaticMesh().GetNumLODs(), 3));
-        meshComp.bNeverDistanceCull = true;
+        // 限制 LOD，跳过 billboard（最后一级）
+        int numLODs = Entry.Mesh.GetNumLODs();
+        if (numLODs > 1)
+        {
+            meshComp.SetForcedLodModel(numLODs - 1); // 不用最后一级 billboard
+        }
 
         spawned.SetRootComponent(meshComp);
 
