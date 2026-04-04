@@ -32,9 +32,10 @@
 - bridge/tunnel OSM 标签在 GeoJsonParser 中的提取（给 algo 用）
 - srtm_to_terrain.py 支持 GeoTIFF 输入（当前仅 HGT）
 
-## TODO (from lead review / peer review)
+## TODO (from lead review)
 
-（暂无）
+- [ ] **P1: GeoJsonParser 提取 bridge/tunnel/layer 标签** (from lead) — OSM `bridge=yes`、`tunnel=yes`、`layer=*` 标签写入 FGISFeature.Tags。algo 的 EStructureLayer 和 RoadNetworkGraph 分层依赖此数据。这是 Phase 5 的前置任务
+- [ ] **P2: srtm_to_terrain.py 支持 GeoTIFF 输入** (from lead) — 当前仅支持 HGT，需扩展支持 GeoTIFF（rasterio 读取）
 
 ## Changelog
 
