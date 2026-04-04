@@ -45,9 +45,11 @@ ELandUseType ClassifySingle(const FLandUsePolygon& Poly,
 - **→ runtime**: PolygonDeriver 输出 TArray<FLandUsePolygon>，runtime 的 GISWorldBuilder 调用
 - **→ runtime**: RoadNetworkGraph 输出道路结构，未来 runtime 做 Spline Mesh 消费
 
-## TODO (from lead review / peer review)
+## TODO (from lead review)
 
-（暂无）
+- [ ] **P2: EStructureLayer 枚举定义** (from lead) — 新增 `EStructureLayer { Ground, Bridge, Tunnel }` 到 `LandUsePolygon.h`，供 pipeline 的 GeoJsonParser 填充、runtime 的 Spline Mesh 消费
+- [ ] **P2: RoadNetworkGraph LayerIndex 分层** (from lead) — 按 OSM `layer=*` 标签分层，同层内做交叉检测+边分割，跨层不分割。依赖 pipeline 先完成 bridge/tunnel 标签提取
+- [ ] **P2: 道路逐顶点高程** (from lead) — FRoadEdge 每个顶点独立高程，替代当前的 AvgElevation。消费 DEMParser 或 CesiumBridge 高程数据
 
 ## Changelog
 
