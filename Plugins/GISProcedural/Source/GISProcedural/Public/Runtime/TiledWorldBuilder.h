@@ -10,6 +10,7 @@
 
 class UPolygonDeriver;
 class ULandUseClassifyRules;
+class ULandUseMapDataAsset;
 class UTiledLandUseMapDataAsset;
 class UTiledFileProvider;
 
