@@ -13,6 +13,7 @@ public class GISProcedural : ModuleRules
             "Core",
             "CoreUObject",
             "Engine",
+            "InputCore",        // FKey, EKeys
             "Json",
             "JsonUtilities",
             "PCG",              // PCG 框架
