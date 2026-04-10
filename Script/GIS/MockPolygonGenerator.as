@@ -77,23 +77,39 @@ class AMockPolygonGenerator : AActor
         int nextID = 0;
 
         // 按类型生成
-        nextID = GeneratePolygonsOfType(ELandUseType::Forest, ForestCount, center, nextID,
+        TArray<FLandUsePolygon> allPolygons;
+
+        nextID = GeneratePolygonsOfType(allPolygons, ELandUseType::Forest, ForestCount, center, nextID,
             0.0f, 0.1f, 0.8f, 1, 1, 0.0f);
 
-        nextID = GeneratePolygonsOfType(ELandUseType::Residential, ResidentialCount, center, nextID,
+        nextID = GeneratePolygonsOfType(allPolygons, ELandUseType::Residential, ResidentialCount, center, nextID,
             0.4f, 0.3f, 0.3f, 2, 5, 8.0f);
 
-        nextID = GeneratePolygonsOfType(ELandUseType::Commercial, CommercialCount, center, nextID,
+        nextID = GeneratePolygonsOfType(allPolygons, ELandUseType::Commercial, CommercialCount, center, nextID,
             0.7f, 0.1f, 0.1f, 3, 12, 5.0f);
 
-        nextID = GeneratePolygonsOfType(ELandUseType::Industrial, IndustrialCount, center, nextID,
+        nextID = GeneratePolygonsOfType(allPolygons, ELandUseType::Industrial, IndustrialCount, center, nextID,
             0.3f, 0.05f, 0.1f, 1, 3, 15.0f);
 
-        nextID = GeneratePolygonsOfType(ELandUseType::Farmland, FarmlandCount, center, nextID,
+        nextID = GeneratePolygonsOfType(allPolygons, ELandUseType::Farmland, FarmlandCount, center, nextID,
             0.0f, 0.0f, 0.6f, 1, 1, 0.0f);
 
-        nextID = GeneratePolygonsOfType(ELandUseType::OpenSpace, OpenSpaceCount, center, nextID,
+        nextID = GeneratePolygonsOfType(allPolygons, ELandUseType::OpenSpace, OpenSpaceCount, center, nextID,
             0.0f, 0.0f, 0.4f, 1, 1, 0.0f);
+
+        // 一次性赋值给 DataAsset
+        DataAsset.Polygons = allPolygons;
+
+        // 验证第一个多边形数据
+        if (allPolygons.Num() > 0)
+        {
+            FLandUsePolygon first = allPolygons[0];
+            Print("[MockGen] Verify poly[0]: ID=" + first.PolygonID
+                + " type=" + int(first.LandUseType)
+                + " verts=" + first.WorldVertices.Num()
+                + " area=" + first.AreaSqM + "sqm"
+                + " center=(" + first.WorldCenter.X + "," + first.WorldCenter.Y + "," + first.WorldCenter.Z + ")");
+        }
 
         // 构建空间索引
         DataAsset.BuildSpatialIndex();
@@ -142,6 +158,7 @@ class AMockPolygonGenerator : AActor
     // ======== 核心生成逻辑 ========
 
     private int GeneratePolygonsOfType(
+        TArray<FLandUsePolygon>& OutPolygons,
         ELandUseType Type, int Count, FVector AreaCenter, int StartID,
         float BuildingDensity, float BldDensityVariance,
         float VegetationDensity,
@@ -225,7 +242,7 @@ class AMockPolygonGenerator : AActor
             poly.MaxFloors = MaxFloors;
             poly.BuildingSetback = Setback;
 
-            DataAsset.Polygons.Add(poly);
+            OutPolygons.Add(poly);
             id++;
         }
         return id;
