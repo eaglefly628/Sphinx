@@ -1,12 +1,5 @@
 // MockPolygonGenerator.as — 生成假的 FLandUsePolygon 数据
 // 模拟矢量数据库查询结果，验证 Polygon → PCG 完整链路
-//
-// 用法：
-//   1. 编辑器中放置 AMockPolygonGenerator 到场景
-//   2. 配置 CenterLocation（放到 Cesium 地面上）和区域大小
-//   3. 点击 "GenerateAndSave" 生成假多边形并保存为 DataAsset
-//   4. 在 PCG Graph 中用 GIS Land Use Sampler 节点引用该 DataAsset
-//   5. PCG 按 LandUseType 过滤 → 分流到树木/建筑 Mesh Spawner
 
 class AMockPolygonGenerator : AActor
 {
@@ -14,20 +7,16 @@ class AMockPolygonGenerator : AActor
     USceneComponent Root;
 
     // ======== 区域配置 ========
-
-    // 生成区域半径（cm）
     UPROPERTY(EditAnywhere, Category = "Mock Data|Area")
-    float AreaRadius = 50000.0f; // 500m
-
-    // 多边形最小/最大半径（cm）
-    UPROPERTY(EditAnywhere, Category = "Mock Data|Area")
-    float PolygonMinRadius = 2000.0f; // 20m
+    float AreaRadius = 50000.0f;
 
     UPROPERTY(EditAnywhere, Category = "Mock Data|Area")
-    float PolygonMaxRadius = 8000.0f; // 80m
+    float PolygonMinRadius = 2000.0f;
 
-    // ======== 生成数量（按类型） ========
+    UPROPERTY(EditAnywhere, Category = "Mock Data|Area")
+    float PolygonMaxRadius = 8000.0f;
 
+    // ======== 数量配置 ========
     UPROPERTY(EditAnywhere, Category = "Mock Data|Counts")
     int ForestCount = 8;
 
@@ -47,17 +36,18 @@ class AMockPolygonGenerator : AActor
     int OpenSpaceCount = 2;
 
     // ======== 输出 ========
-
-    // 生成的 DataAsset 引用（Generate 后自动填充）
     UPROPERTY(EditAnywhere, Category = "Mock Data|Output")
     ULandUseMapDataAsset DataAsset;
 
-    // ======== 可视化 ========
     UPROPERTY(EditAnywhere, Category = "Mock Data|Debug")
     bool bDrawDebugPolygons = true;
 
     UPROPERTY(EditAnywhere, Category = "Mock Data|Debug")
     float DebugDrawDuration = 30.0f;
+
+    // ======== 内部临时存储 ========
+    private TArray<FLandUsePolygon> TempPolygons;
+    private int NextID = 0;
 
     // ======== 编辑器按钮 ========
 
@@ -66,70 +56,49 @@ class AMockPolygonGenerator : AActor
     {
         if (DataAsset == nullptr)
         {
-            Print("[MockGen] ERROR: Assign a DataAsset first! (Create one in Content Browser: Right-click → GIS → LandUseMapDataAsset)");
+            Print("[MockGen] ERROR: Assign a DataAsset first!");
             return;
         }
 
-        Print("[MockGen] ===== GENERATING MOCK POLYGON DATA =====");
+        Print("[MockGen] ===== GENERATING =====");
 
-        DataAsset.Polygons.Empty();
+        TempPolygons.Empty();
+        NextID = 0;
         FVector center = GetActorLocation();
-        int nextID = 0;
 
-        // 按类型生成
-        TArray<FLandUsePolygon> allPolygons;
+        AddPolygonsOfType(ELandUseType::Forest, ForestCount, center, 0.0f, 0.8f, 1, 1, 0.0f);
+        AddPolygonsOfType(ELandUseType::Residential, ResidentialCount, center, 0.4f, 0.3f, 2, 5, 8.0f);
+        AddPolygonsOfType(ELandUseType::Commercial, CommercialCount, center, 0.7f, 0.1f, 3, 12, 5.0f);
+        AddPolygonsOfType(ELandUseType::Industrial, IndustrialCount, center, 0.3f, 0.1f, 1, 3, 15.0f);
+        AddPolygonsOfType(ELandUseType::Farmland, FarmlandCount, center, 0.0f, 0.6f, 1, 1, 0.0f);
+        AddPolygonsOfType(ELandUseType::OpenSpace, OpenSpaceCount, center, 0.0f, 0.4f, 1, 1, 0.0f);
 
-        nextID = GeneratePolygonsOfType(allPolygons, ELandUseType::Forest, ForestCount, center, nextID,
-            0.0f, 0.1f, 0.8f, 1, 1, 0.0f);
+        Print("[MockGen] TempPolygons count: " + TempPolygons.Num());
 
-        nextID = GeneratePolygonsOfType(allPolygons, ELandUseType::Residential, ResidentialCount, center, nextID,
-            0.4f, 0.3f, 0.3f, 2, 5, 8.0f);
-
-        nextID = GeneratePolygonsOfType(allPolygons, ELandUseType::Commercial, CommercialCount, center, nextID,
-            0.7f, 0.1f, 0.1f, 3, 12, 5.0f);
-
-        nextID = GeneratePolygonsOfType(allPolygons, ELandUseType::Industrial, IndustrialCount, center, nextID,
-            0.3f, 0.05f, 0.1f, 1, 3, 15.0f);
-
-        nextID = GeneratePolygonsOfType(allPolygons, ELandUseType::Farmland, FarmlandCount, center, nextID,
-            0.0f, 0.0f, 0.6f, 1, 1, 0.0f);
-
-        nextID = GeneratePolygonsOfType(allPolygons, ELandUseType::OpenSpace, OpenSpaceCount, center, nextID,
-            0.0f, 0.0f, 0.4f, 1, 1, 0.0f);
-
-        // 一次性赋值给 DataAsset
-        DataAsset.Polygons = allPolygons;
-
-        // 验证第一个多边形数据
-        if (allPolygons.Num() > 0)
+        // 验证第一个
+        if (TempPolygons.Num() > 0)
         {
-            FLandUsePolygon first = allPolygons[0];
-            Print("[MockGen] Verify poly[0]: ID=" + first.PolygonID
-                + " type=" + int(first.LandUseType)
-                + " verts=" + first.WorldVertices.Num()
-                + " area=" + first.AreaSqM + "sqm"
-                + " center=(" + first.WorldCenter.X + "," + first.WorldCenter.Y + "," + first.WorldCenter.Z + ")");
+            Print("[MockGen] poly[0]: verts=" + TempPolygons[0].WorldVertices.Num()
+                + " type=" + int(TempPolygons[0].LandUseType)
+                + " area=" + TempPolygons[0].AreaSqM);
         }
 
-        // 构建空间索引
+        // 赋值给 DataAsset
+        DataAsset.Polygons = TempPolygons;
+
+        Print("[MockGen] DataAsset.Polygons count: " + DataAsset.Polygons.Num());
+
+        if (DataAsset.Polygons.Num() > 0)
+        {
+            Print("[MockGen] DA poly[0] verts=" + DataAsset.Polygons[0].WorldVertices.Num());
+        }
+
         DataAsset.BuildSpatialIndex();
 
-        Print("[MockGen] Total: " + DataAsset.Polygons.Num() + " polygons generated");
-        Print("[MockGen] Forest=" + ForestCount
-            + " Residential=" + ResidentialCount
-            + " Commercial=" + CommercialCount
-            + " Industrial=" + IndustrialCount
-            + " Farmland=" + FarmlandCount
-            + " OpenSpace=" + OpenSpaceCount);
-
-        // 可视化
         if (bDrawDebugPolygons)
-        {
             DrawAllPolygons();
-        }
 
-        Print("[MockGen] ===== DONE =====");
-        Print("[MockGen] DataAsset ready. Use 'GIS Land Use Sampler' PCG node to consume it.");
+        Print("[MockGen] ===== DONE: " + DataAsset.Polygons.Num() + " polygons =====");
     }
 
     UFUNCTION(CallInEditor, Category = "Mock Data")
@@ -137,11 +106,10 @@ class AMockPolygonGenerator : AActor
     {
         if (DataAsset == nullptr || DataAsset.Polygons.Num() == 0)
         {
-            Print("[MockGen] No data to draw.");
+            Print("[MockGen] No data.");
             return;
         }
         DrawAllPolygons();
-        Print("[MockGen] Drawing " + DataAsset.Polygons.Num() + " polygons for " + DebugDrawDuration + "s");
     }
 
     UFUNCTION(CallInEditor, Category = "Mock Data")
@@ -151,26 +119,22 @@ class AMockPolygonGenerator : AActor
         {
             DataAsset.Polygons.Empty();
             DataAsset.ClearSpatialIndex();
-            Print("[MockGen] DataAsset cleared.");
         }
+        TempPolygons.Empty();
+        Print("[MockGen] Cleared.");
     }
 
-    // ======== 核心生成逻辑 ========
+    // ======== 生成逻辑（用成员变量，不传引用） ========
 
-    private int GeneratePolygonsOfType(
-        TArray<FLandUsePolygon>& OutPolygons,
-        ELandUseType Type, int Count, FVector AreaCenter, int StartID,
-        float BuildingDensity, float BldDensityVariance,
-        float VegetationDensity,
-        int MinFloors, int MaxFloors,
-        float Setback)
+    private void AddPolygonsOfType(
+        ELandUseType Type, int Count, FVector AreaCenter,
+        float BuildDensity, float VegDensity,
+        int MinFloors, int MaxFloors, float Setback)
     {
-        int id = StartID;
         for (int i = 0; i < Count; i++)
         {
-            // 随机位置（在区域内）
             float angle = Math::RandRange(0.0f, 360.0f);
-            float dist = Math::RandRange(0.0f, AreaRadius);
+            float dist = Math::RandRange(AreaRadius * 0.1f, AreaRadius);
             float rad = Math::DegreesToRadians(angle);
             FVector polyCenter = AreaCenter + FVector(
                 Math::Cos(rad) * dist,
@@ -191,7 +155,7 @@ class AMockPolygonGenerator : AActor
                 polyCenter = hit.Location;
             }
 
-            // 生成不规则多边形顶点
+            // 生成多边形顶点
             float polyRadius = Math::RandRange(PolygonMinRadius, PolygonMaxRadius);
             int numVerts = Math::RandRange(5, 10);
             TArray<FVector> verts;
@@ -200,18 +164,14 @@ class AMockPolygonGenerator : AActor
                 float vAngle = (float(v) / float(numVerts)) * 360.0f;
                 float vRad = Math::DegreesToRadians(vAngle);
                 float jitter = Math::RandRange(0.7f, 1.3f);
-                FVector vert = polyCenter + FVector(
+                verts.Add(polyCenter + FVector(
                     Math::Cos(vRad) * polyRadius * jitter,
                     Math::Sin(vRad) * polyRadius * jitter,
                     0
-                );
-                verts.Add(vert);
+                ));
             }
 
-            // 计算面积（简化：用半径近似圆面积）
-            float areaSqM = 3.14159f * (polyRadius / 100.0f) * (polyRadius / 100.0f);
-
-            // 计算 AABB
+            // AABB
             FVector bMin = verts[0];
             FVector bMax = verts[0];
             for (int v = 1; v < verts.Num(); v++)
@@ -224,9 +184,10 @@ class AMockPolygonGenerator : AActor
                 bMax.Z = Math::Max(bMax.Z, verts[v].Z);
             }
 
-            // 填充 FLandUsePolygon
+            float areaSqM = 3.14159f * (polyRadius / 100.0f) * (polyRadius / 100.0f);
+
             FLandUsePolygon poly;
-            poly.PolygonID = id;
+            poly.PolygonID = NextID;
             poly.TileCoord = FIntPoint(0, 0);
             poly.LandUseType = Type;
             poly.WorldVertices = verts;
@@ -236,16 +197,15 @@ class AMockPolygonGenerator : AActor
             poly.AvgElevation = polyCenter.Z / 100.0f;
             poly.AvgSlope = Math::RandRange(0.0f, 15.0f);
             poly.bAdjacentToMainRoad = (Math::RandRange(0, 3) == 0);
-            poly.BuildingDensity = BuildingDensity + Math::RandRange(-BldDensityVariance, BldDensityVariance);
-            poly.VegetationDensity = VegetationDensity + Math::RandRange(-0.1f, 0.1f);
+            poly.BuildingDensity = BuildDensity + Math::RandRange(-0.1f, 0.1f);
+            poly.VegetationDensity = VegDensity + Math::RandRange(-0.1f, 0.1f);
             poly.MinFloors = MinFloors;
             poly.MaxFloors = MaxFloors;
             poly.BuildingSetback = Setback;
 
-            OutPolygons.Add(poly);
-            id++;
+            TempPolygons.Add(poly);
+            NextID++;
         }
-        return id;
     }
 
     // ======== Debug 可视化 ========
@@ -257,18 +217,14 @@ class AMockPolygonGenerator : AActor
             FLandUsePolygon poly = DataAsset.Polygons[i];
             FLinearColor color = GetColorForType(poly.LandUseType);
 
-            // 画多边形边
             for (int v = 0; v < poly.WorldVertices.Num(); v++)
             {
                 int next = (v + 1) % poly.WorldVertices.Num();
-                FVector from = poly.WorldVertices[v] + FVector(0, 0, 50); // 稍微抬高
+                FVector from = poly.WorldVertices[v] + FVector(0, 0, 50);
                 FVector to = poly.WorldVertices[next] + FVector(0, 0, 50);
                 System::DrawDebugLine(from, to, color, DebugDrawDuration, 3.0f);
             }
-
-            // 标注中心
-            System::DrawDebugPoint(poly.WorldCenter + FVector(0, 0, 100),
-                10.0f, color, DebugDrawDuration);
+            System::DrawDebugPoint(poly.WorldCenter + FVector(0, 0, 100), 10.0f, color, DebugDrawDuration);
         }
     }
 
@@ -276,15 +232,15 @@ class AMockPolygonGenerator : AActor
     {
         switch (Type)
         {
-            case ELandUseType::Forest:      return FLinearColor(0.1f, 0.8f, 0.1f, 1.0f); // 绿
-            case ELandUseType::Residential: return FLinearColor(0.9f, 0.7f, 0.2f, 1.0f); // 橙
-            case ELandUseType::Commercial:  return FLinearColor(0.2f, 0.4f, 0.9f, 1.0f); // 蓝
-            case ELandUseType::Industrial:  return FLinearColor(0.6f, 0.3f, 0.6f, 1.0f); // 紫
-            case ELandUseType::Farmland:    return FLinearColor(0.8f, 0.8f, 0.2f, 1.0f); // 黄
-            case ELandUseType::OpenSpace:   return FLinearColor(0.5f, 0.9f, 0.5f, 1.0f); // 浅绿
-            case ELandUseType::Water:       return FLinearColor(0.1f, 0.3f, 0.9f, 1.0f); // 深蓝
-            case ELandUseType::Road:        return FLinearColor(0.5f, 0.5f, 0.5f, 1.0f); // 灰
-            case ELandUseType::Military:    return FLinearColor(0.9f, 0.1f, 0.1f, 1.0f); // 红
+            case ELandUseType::Forest:      return FLinearColor(0.1f, 0.8f, 0.1f, 1.0f);
+            case ELandUseType::Residential: return FLinearColor(0.9f, 0.7f, 0.2f, 1.0f);
+            case ELandUseType::Commercial:  return FLinearColor(0.2f, 0.4f, 0.9f, 1.0f);
+            case ELandUseType::Industrial:  return FLinearColor(0.6f, 0.3f, 0.6f, 1.0f);
+            case ELandUseType::Farmland:    return FLinearColor(0.8f, 0.8f, 0.2f, 1.0f);
+            case ELandUseType::OpenSpace:   return FLinearColor(0.5f, 0.9f, 0.5f, 1.0f);
+            case ELandUseType::Water:       return FLinearColor(0.1f, 0.3f, 0.9f, 1.0f);
+            case ELandUseType::Road:        return FLinearColor(0.5f, 0.5f, 0.5f, 1.0f);
+            case ELandUseType::Military:    return FLinearColor(0.9f, 0.1f, 0.1f, 1.0f);
         }
         return FLinearColor(1.0f, 1.0f, 1.0f, 1.0f);
     }
