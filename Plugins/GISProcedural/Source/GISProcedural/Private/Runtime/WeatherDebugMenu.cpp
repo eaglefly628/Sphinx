@@ -43,7 +43,7 @@ void AWeatherDebugMenu::BeginPlay()
 	UE_LOG(LogWeatherDebug, Log, TEXT("===== WeatherDebugMenu START ====="));
 	UE_LOG(LogWeatherDebug, Log, TEXT("UDS: %s"), UDSActor ? *UDSActor->GetName() : TEXT("NOT FOUND"));
 	UE_LOG(LogWeatherDebug, Log, TEXT("UDW: %s"), UDWActor ? *UDWActor->GetName() : TEXT("NOT FOUND"));
-	UE_LOG(LogWeatherDebug, Log, TEXT("Press %s to toggle debug menu"), *ToggleKey.ToString());
+	UE_LOG(LogWeatherDebug, Log, TEXT("Press F9 to toggle debug menu"));
 	UE_LOG(LogWeatherDebug, Log, TEXT("===== WeatherDebugMenu READY ====="));
 }
 

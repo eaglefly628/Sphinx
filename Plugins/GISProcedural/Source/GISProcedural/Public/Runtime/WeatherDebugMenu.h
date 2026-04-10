@@ -27,7 +27,7 @@ public:
 
 	/** Key to toggle the debug menu */
 	UPROPERTY(EditAnywhere, Category = "Weather Debug")
-	FKey ToggleKey = EKeys::F1;
+	FKey ToggleKey = EKeys::F9;
 
 	/** Time adjustment step per second when holding arrow keys */
 	UPROPERTY(EditAnywhere, Category = "Weather Debug")
