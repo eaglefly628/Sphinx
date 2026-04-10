@@ -26,6 +26,9 @@ public class GISProcedural : ModuleRules
             "Projects",
             "ImageWrapper",        // PNG heightmap 解码
             "HTTP",                // ArcGIS REST API 调用
+            "UMG",                 // WeatherDebugMenu UI
+            "Slate",
+            "SlateCore",
         });
 
         // Cesium 软依赖：仅在 CesiumRuntime 模块存在时启用

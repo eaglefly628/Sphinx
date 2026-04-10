@@ -1,15 +1,27 @@
-// WeatherDebugMenu.h - In-game debug HUD for UDS/UDW weather control
+// WeatherDebugMenu.h - UMG-based in-game weather debug panel
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "WeatherDebugMenu.generated.h"
 
+class UUserWidget;
+class UComboBoxString;
+class USlider;
+class UTextBlock;
+class UButton;
+class UCheckBox;
+
 /**
- * In-game weather debug menu.
+ * In-game weather debug menu with UMG UI.
  *
- * Drop into level, press F1 to toggle.
- * Controls time-of-day, weather presets, cloud/fog/rain/thunder.
+ * Drop into level, press F9 to toggle a clean panel with:
+ * - Weather preset dropdown
+ * - Time of day slider
+ * - Cloud/Fog/Rain/Snow/Thunder sliders
+ * - Day/Night cycle speed control
+ * - Quick jump buttons
+ *
  * Auto-discovers Ultra Dynamic Sky and Ultra Dynamic Weather actors.
  */
 UCLASS(BlueprintType)
@@ -22,82 +34,61 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
-
-	// ---- Configuration ----
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** Key to toggle the debug menu */
 	UPROPERTY(EditAnywhere, Category = "Weather Debug")
 	FKey ToggleKey = EKeys::F9;
 
-	/** Time adjustment step per second when holding arrow keys */
-	UPROPERTY(EditAnywhere, Category = "Weather Debug")
-	float TimeAdjustSpeed = 200.f;
-
-	// ---- Public API ----
-
-	UFUNCTION(BlueprintCallable, Category = "Weather Debug")
-	void SetTimeOfDay(float Time);
-
-	UFUNCTION(BlueprintCallable, Category = "Weather Debug")
-	void SetCloudCoverage(float Coverage);
-
-	UFUNCTION(BlueprintCallable, Category = "Weather Debug")
-	void SetFog(float Fog);
-
-	UFUNCTION(BlueprintCallable, Category = "Weather Debug")
-	void SetWeatherPreset(int32 Index);
-
-	UFUNCTION(BlueprintCallable, Category = "Weather Debug")
-	void SetDayLength(float Minutes);
-
-	UFUNCTION(BlueprintCallable, Category = "Weather Debug")
-	void SetNightLength(float Minutes);
-
 private:
+	// ---- UI ----
+	void CreateUI();
+	void RemoveUI();
+	void UpdateUIValues();
+
 	// ---- Actor Discovery ----
 	void FindUDS();
 	void FindUDW();
 
-	// ---- Input ----
-	void HandleInput(float DeltaSeconds);
-	bool WasKeyJustPressed(FKey Key);
+	// ---- UDS/UDW Reflection Helpers ----
+	void SetFloatProp(AActor* Actor, FName Name, float Value);
+	float GetFloatProp(AActor* Actor, FName Name) const;
+	void SetBoolProp(AActor* Actor, FName Name, bool Value);
 
-	// ---- UDS/UDW Property Access (reflection) ----
-	void SetFloatOnActor(AActor* Actor, FName PropertyName, float Value);
-	float GetFloatFromActor(AActor* Actor, FName PropertyName) const;
-	void SetBoolOnActor(AActor* Actor, FName PropertyName, bool Value);
-	void CallChangeWeather(int32 PresetIndex);
-
-	// ---- HUD Drawing ----
-	void DrawHUD();
-	void DrawLine(const FString& Text, FColor Color, float& Y);
+	// ---- Callbacks ----
+	UFUNCTION() void OnPresetChanged(FString Item, ESelectInfo::Type SelectionType);
+	UFUNCTION() void OnTimeSliderChanged(float Value);
+	UFUNCTION() void OnCloudSliderChanged(float Value);
+	UFUNCTION() void OnFogSliderChanged(float Value);
+	UFUNCTION() void OnRainSliderChanged(float Value);
+	UFUNCTION() void OnSnowSliderChanged(float Value);
+	UFUNCTION() void OnThunderSliderChanged(float Value);
+	UFUNCTION() void OnDaySpeedSliderChanged(float Value);
+	UFUNCTION() void OnNightSpeedSliderChanged(float Value);
+	UFUNCTION() void OnDayClicked();
+	UFUNCTION() void OnNightClicked();
+	UFUNCTION() void OnAnimateChanged(bool bIsChecked);
 
 	// ---- State ----
-	UPROPERTY()
-	TObjectPtr<AActor> UDSActor;
-
-	UPROPERTY()
-	TObjectPtr<AActor> UDWActor;
+	UPROPERTY() TObjectPtr<AActor> UDSActor;
+	UPROPERTY() TObjectPtr<AActor> UDWActor;
+	UPROPERTY() TObjectPtr<UUserWidget> MenuWidget;
 
 	bool bMenuVisible = false;
-	bool bToggleKeyWasDown = false;
-	TMap<FKey, bool> PrevKeyStates;
+	bool bToggleWasDown = false;
+	bool bUICreated = false;
 
-	// Tracked weather values
-	float TimeOfDayValue = 1200.f;
-	float DayLengthValue = 2.f;
-	float NightLengthValue = 1.f;
-	float CloudCoverageValue = 0.5f;
-	float FogValue = 0.f;
-	float RainValue = 0.f;
-	float ThunderValue = 0.f;
-	float SnowValue = 0.f;
-	int32 CurrentPresetIndex = -1;
-	bool bAnimateTime = true;
-
-	// Preset info
-	static const TArray<FString>& GetPresetNames();
-
-	// Key state tracking for edge detection
-	TSet<FKey> KeysDownLastFrame;
+	// Widget references
+	UPROPERTY() UComboBoxString* PresetCombo = nullptr;
+	UPROPERTY() USlider* TimeSlider = nullptr;
+	UPROPERTY() USlider* CloudSlider = nullptr;
+	UPROPERTY() USlider* FogSlider = nullptr;
+	UPROPERTY() USlider* RainSlider = nullptr;
+	UPROPERTY() USlider* SnowSlider = nullptr;
+	UPROPERTY() USlider* ThunderSlider = nullptr;
+	UPROPERTY() USlider* DaySpeedSlider = nullptr;
+	UPROPERTY() USlider* NightSpeedSlider = nullptr;
+	UPROPERTY() UTextBlock* TimeLabel = nullptr;
+	UPROPERTY() UTextBlock* StatusLabel = nullptr;
+	UPROPERTY() UCheckBox* AnimateCheck = nullptr;
 };
