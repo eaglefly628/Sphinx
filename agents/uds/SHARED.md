@@ -66,9 +66,11 @@ UDS 插件已入库（Git LFS），API 分析完成。集成代码待创建。
 - [ ] 太空→地面云层穿越序列
 - [ ] 军事仿真天气参数（能见度、风速、降水量）
 
-## TODO (from lead review / peer review)
+## TODO (from lead review)
 
-（暂无）
+- [ ] **P1: 完善 WeatherBridge.as** (from lead) — 当前 Script/WeatherBridge.as 只有 auto-find 功能。需补充：1) Cesium 经纬度→UDS Latitude/Longitude/TimeZone 同步 2) 时间同步（Cesium 时间→UDS Time of Day）3) 基础天气控制函数（SetWeather/SetTimeOfDay）。**全部用 AngelScript，不写 C++**，写前必读 `docs/AngelScript_Guide.md`
+- [ ] **P2: 天气→PCG 联动接口** (from lead) — 暴露当前天气状态（雨/雪/雾/能见度）供 runtime 的 PCG 节点查询，用 UPROPERTY 暴露给蓝图/AS
+- [ ] **P3: 太空→地面云层穿越** (from lead) — 按调研方案实现 Sky Mode 切换序列。优先级最低，先完成 P1/P2
 
 ## Changelog
 

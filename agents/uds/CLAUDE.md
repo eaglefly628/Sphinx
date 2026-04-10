@@ -16,17 +16,15 @@ You are the **uds** agent (UDS 工程师 **小U**) for Sphinx GIS Procedural Gen
 ## Key Files
 
 ```
-（待创建 — UDS 集成是新功能）
-Plugins/GISProcedural/Source/GISProcedural/
-├── Public/Runtime/
-│   └── WeatherBridgeComponent.h    ← 待创建：UDS 桥接组件
-├── Private/Runtime/
-│   └── WeatherBridgeComponent.cpp  ← 待创建
+Script/
+├── WeatherBridge.as              ← UDS 桥接（AngelScript，已有初版）
+├── Weather/                      ← 天气扩展脚本（待建）
+
+Plugins/UltraDynamicSky/          ← 第三方 Blueprint 插件（不修改）
 ```
 
-**外部依赖**：
-- Ultra Dynamic Sky 插件（Fab/Marketplace 购买）
-- 与 CesiumForUnreal 类似采用软依赖模式（WITH_UDS=0/1）
+**开发方式**：AngelScript 优先，不写 C++。UDS 是纯 Blueprint 插件，用 AS 反射调用。
+写 AS 前必读 `docs/AngelScript_Guide.md`。
 
 ## Domain Knowledge
 

@@ -45,9 +45,11 @@ ELandUseType ClassifySingle(const FLandUsePolygon& Poly,
 - **→ runtime**: PolygonDeriver 输出 TArray<FLandUsePolygon>，runtime 的 GISWorldBuilder 调用
 - **→ runtime**: RoadNetworkGraph 输出道路结构，未来 runtime 做 Spline Mesh 消费
 
-## TODO (from lead review / peer review)
+## TODO (from lead review)
 
-（暂无）
+- [ ] **P2: EStructureLayer 枚举定义** (from lead) — 新增 `EStructureLayer { Ground, Bridge, Tunnel }` 到 `LandUsePolygon.h`，供 pipeline 的 GeoJsonParser 填充、runtime 的 Spline Mesh 消费
+- [ ] **P2: RoadNetworkGraph LayerIndex 分层** (from lead) — 按 OSM `layer=*` 标签分层，同层内做交叉检测+边分割，跨层不分割。依赖 pipeline 先完成 bridge/tunnel 标签提取
+- [ ] **P2: 道路逐顶点高程** (from lead) — FRoadEdge 每个顶点独立高程，替代当前的 AvgElevation。消费 DEMParser 或 CesiumBridge 高程数据
 
 ## Changelog
 
@@ -59,3 +61,37 @@ ELandUseType ClassifySingle(const FLandUsePolygon& Poly,
 - fix: ArcGISRestProvider FGenericPlatformHttp::UrlEncode → FPlatformHttp::UrlEncode（UE5 新版 API）
 - fix: PCGGISNode SourceComponent 废弃 API → .Get() + PCGComponent.h include
 - fix: RoadNetworkGraph 局部变量 NextEdgeID 遮蔽类成员 → 重命名 FoundEdgeID
+
+### [v1.0.2] Session 01AX8SpXvMkCNzwKftaQ3tE7 — algo (UE 5.7 全面适配)
+
+#### 编译修复
+- fix: GISWorldBuilder ActorLabel → PolyLabel（UE 5.7 AActor::ActorLabel 变 private）
+- fix: TiledFileProvider OldestKey 未初始化 → (0,0)
+- fix: GISProcedural.uplugin 声明 CesiumForUnreal 可选依赖
+
+#### CesiumForUnreal 集成
+- CesiumForUnreal v2.24.1 UE 5.7 预编译版替换（源码 + ThirdParty 匹配）
+- Git LFS 配置 .lib/.uasset
+- CesiumRuntime.Build.cs ThirdParty 检测
+
+#### AngelScript 踩坑记录 (AS-1 ~ AS-7)
+- docs/AngelScript_Guide.md 更新
+- 关键发现：FMath→Math, SetTimer用FName/ClearTimer用FString, 无RegisterComponent, Cesium下SpawnActor坐标反转
+
+#### Phase A 验证（进行中）
+- MockPolygonGenerator.as: 成功生成 23 个假多边形到 DataAsset 内存
+- **问题**: AngelScript 无法持久化 DataAsset 到磁盘
+- **结论**: 需移植到 C++ 实现（支持 Live Coding + SavePackage）
+
+#### 下一步（新 Session）
+1. C++ 版 AMockPolygonGenerator（CallInEditor + SavePackage 持久化）
+2. 编辑器搭 PCG Graph 验证 Polygon → PCGGISNode → Spawn 完整链路
+3. 按 LandUseType 分流到不同 Mesh Spawner
+
+关键参考文件：
+- `Public/Polygon/LandUsePolygon.h` — 数据结构
+- `Public/Data/LandUseMapDataAsset.h` — 存储 + 空间索引
+- `Public/PCG/PCGGISNode.h` — PCG 采样节点
+- `Script/GIS/MockPolygonGenerator.as` — AngelScript 版逻辑参考
+
+**新 Session 继续在 `claude/claudeMainBranch-0zjsx` 分支工作。**

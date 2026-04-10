@@ -107,6 +107,8 @@ python Tools/GISPreprocess/preprocess.py --input ./RawData --output ./Output \
 - 新文件遵循现有目录结构: Public/Data/, Public/Polygon/, Public/Runtime/, Public/PCG/
 - Python 预处理输出 WGS84 GeoJSON，投影由 UE 侧处理
 
+- AngelScript 文件放在 `Script/` 目录，写 AS 前必读 `docs/AngelScript_Guide.md`
+
 ## Design Principles
 
 - **AngelScript 优先**：引擎已集成 AngelScript，新功能优先用 AngelScript（不编译）实现；仅在 AngelScript 无法满足性能/底层需求时才用 C++。现有 C++ 模块保持不变，新增游戏逻辑/编辑器工具/蓝图替代层用 AngelScript
