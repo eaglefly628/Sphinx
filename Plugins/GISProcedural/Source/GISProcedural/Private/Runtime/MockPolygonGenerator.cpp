@@ -271,7 +271,7 @@ void AMockPolygonGenerator::AddPolygonsOfType(
 
 void AMockPolygonGenerator::DrawAllPolygons()
 {
-	const UWorld* World = GetWorld();
+	UWorld* World = GetWorld();
 	if (!World || !DataAsset) return;
 
 	for (int32 i = 0; i < DataAsset->Polygons.Num(); ++i)
