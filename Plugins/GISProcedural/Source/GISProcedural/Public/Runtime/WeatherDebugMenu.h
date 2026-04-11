@@ -36,9 +36,9 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	/** Key to toggle the debug menu */
+	/** Key to toggle the debug menu (default: Insert) */
 	UPROPERTY(EditAnywhere, Category = "Weather Debug")
-	FKey ToggleKey = EKeys::F9;
+	FKey ToggleKey = EKeys::Insert;
 
 private:
 	// ---- UI ----

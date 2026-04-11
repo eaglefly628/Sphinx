@@ -100,7 +100,7 @@ void AWeatherDebugMenu::BeginPlay()
 	UE_LOG(LogWeatherDebug, Log, TEXT("===== WeatherDebugMenu ====="));
 	UE_LOG(LogWeatherDebug, Log, TEXT("UDS: %s"), UDSActor ? *UDSActor->GetName() : TEXT("NOT FOUND"));
 	UE_LOG(LogWeatherDebug, Log, TEXT("UDW: %s"), UDWActor ? *UDWActor->GetName() : TEXT("NOT FOUND"));
-	UE_LOG(LogWeatherDebug, Log, TEXT("Press F9 to toggle"));
+	UE_LOG(LogWeatherDebug, Log, TEXT("Press Insert to toggle debug menu"));
 }
 
 // ---- EndPlay ----
