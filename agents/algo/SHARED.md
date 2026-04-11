@@ -95,3 +95,31 @@ ELandUseType ClassifySingle(const FLandUsePolygon& Poly,
 - `Script/GIS/MockPolygonGenerator.as` — AngelScript 版逻辑参考
 
 **新 Session 继续在 `claude/claudeMainBranch-0zjsx` 分支工作。**
+
+### [v1.0.3] — algo (Phase A: MockPolygonGenerator C++ 移植)
+
+#### C++ 移植
+- feat: `AMockPolygonGenerator` C++ 版 (`.h` + `.cpp`)
+  - 完整移植 `MockPolygonGenerator.as` 所有逻辑
+  - CallInEditor: GenerateMockData / CreateAndSaveNewDataAsset / DrawPolygons / ClearData
+  - `UPackage::SavePackage` 持久化 DataAsset 到磁盘（AS 版无法做到）
+  - `FAssetRegistryModule::AssetCreated` 注册到资产浏览器
+  - `#if WITH_EDITOR` 保护所有编辑器专用代码
+  - Ground trace 贴地（LineTraceSingleByChannel）
+  - BuildingDensity/VegetationDensity 带 FMath::Clamp 防止越界
+
+#### 文件清单
+- `Public/Runtime/MockPolygonGenerator.h` — 新增
+- `Private/Runtime/MockPolygonGenerator.cpp` — 新增
+- Build.cs 无需修改（SavePackage 在 CoreUObject，已有依赖）
+
+#### 与 AS 版差异
+- SavePackage 持久化 ✅（AS 版 ❌）
+- CreateAndSaveNewDataAsset 一键创建 + 保存 ✅（AS 版无）
+- SavePath 可配置（默认 `/Game/GISData/MockLandUseMap`）
+- Density 值 Clamp 到 [0,1]（AS 版可能产生负值）
+
+#### 下一步
+1. 编辑器内验证：放置 AMockPolygonGenerator → CreateAndSaveNewDataAsset → GenerateMockData
+2. 搭 PCG Graph：PCGGISNode 引用生成的 DataAsset → Attribute Filter → Static Mesh Spawner
+3. 验证完整链路：MockPolygon → DataAsset → PCGGISNode → Spawn
