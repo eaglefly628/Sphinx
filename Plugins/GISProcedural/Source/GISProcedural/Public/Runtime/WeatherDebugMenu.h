@@ -111,6 +111,4 @@ private:
 	UPROPERTY() UTextBlock* DaySpeedValueLabel = nullptr;
 	UPROPERTY() UTextBlock* NightSpeedValueLabel = nullptr;
 
-	// Property discovery - dumps all UDS/UDW properties + functions to log
-	void DumpActorProperties(AActor* Actor, const FString& Label);
 };

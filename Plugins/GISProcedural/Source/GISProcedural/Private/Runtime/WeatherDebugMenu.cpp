@@ -102,11 +102,6 @@ void AWeatherDebugMenu::BeginPlay()
 	UE_LOG(LogWeatherDebug, Log, TEXT("UDS: %s"), UDSActor ? *UDSActor->GetName() : TEXT("NOT FOUND"));
 	UE_LOG(LogWeatherDebug, Log, TEXT("UDW: %s"), UDWActor ? *UDWActor->GetName() : TEXT("NOT FOUND"));
 
-	// Dump all Blueprint-defined properties and functions to log
-	// Search Output Log for "LogWeatherDebug" to find correct FNames
-	DumpActorProperties(UDSActor, TEXT("UDS"));
-	DumpActorProperties(UDWActor, TEXT("UDW"));
-
 	UE_LOG(LogWeatherDebug, Log, TEXT("Press Home to toggle debug menu"));
 	UE_LOG(LogWeatherDebug, Log, TEXT("===== WeatherDebugMenu END ====="));
 }
@@ -116,102 +111,6 @@ void AWeatherDebugMenu::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	RemoveUI();
 	Super::EndPlay(EndPlayReason);
-}
-
-// ---- Property Discovery ----
-void AWeatherDebugMenu::DumpActorProperties(AActor* Actor, const FString& Label)
-{
-	if (!Actor)
-	{
-		UE_LOG(LogWeatherDebug, Warning, TEXT("===== %s: Actor is NULL ====="), *Label);
-		return;
-	}
-
-	UClass* Cls = Actor->GetClass();
-	UE_LOG(LogWeatherDebug, Log, TEXT("===== %s Properties [class: %s] START ====="), *Label, *Cls->GetName());
-
-	// Dump properties - skip core engine C++ classes (package /Script/...)
-	for (TFieldIterator<FProperty> It(Cls); It; ++It)
-	{
-		FProperty* Prop = *It;
-		UClass* OwnerClass = Prop->GetOwnerClass();
-		if (OwnerClass)
-		{
-			FString PkgName = OwnerClass->GetOutermost()->GetName();
-			if (PkgName.StartsWith(TEXT("/Script/")))
-				continue;
-		}
-
-		FString TypeStr;
-		FString ValueStr;
-
-		if (FFloatProperty* FP = CastField<FFloatProperty>(Prop))
-		{
-			TypeStr = TEXT("float");
-			ValueStr = FString::Printf(TEXT("%.4f"), FP->GetPropertyValue_InContainer(Actor));
-		}
-		else if (FDoubleProperty* DP = CastField<FDoubleProperty>(Prop))
-		{
-			TypeStr = TEXT("double");
-			ValueStr = FString::Printf(TEXT("%.4f"), DP->GetPropertyValue_InContainer(Actor));
-		}
-		else if (FBoolProperty* BP = CastField<FBoolProperty>(Prop))
-		{
-			TypeStr = TEXT("bool");
-			ValueStr = BP->GetPropertyValue_InContainer(Actor) ? TEXT("true") : TEXT("false");
-		}
-		else if (FByteProperty* ByteP = CastField<FByteProperty>(Prop))
-		{
-			TypeStr = TEXT("byte");
-			ValueStr = FString::Printf(TEXT("%d"), ByteP->GetPropertyValue_InContainer(Actor));
-		}
-		else if (FIntProperty* IP = CastField<FIntProperty>(Prop))
-		{
-			TypeStr = TEXT("int32");
-			ValueStr = FString::Printf(TEXT("%d"), IP->GetPropertyValue_InContainer(Actor));
-		}
-		else if (FStructProperty* SP = CastField<FStructProperty>(Prop))
-		{
-			TypeStr = FString::Printf(TEXT("struct:%s"), *SP->Struct->GetName());
-			ValueStr = TEXT("(struct)");
-		}
-		else
-		{
-			TypeStr = Prop->GetCPPType();
-			ValueStr = TEXT("(...)");
-		}
-
-		UE_LOG(LogWeatherDebug, Log, TEXT("  [%s] %s = %s"), *TypeStr, *Prop->GetFName().ToString(), *ValueStr);
-	}
-
-	// Dump functions - helps discover callable BP functions like "Change Weather"
-	UE_LOG(LogWeatherDebug, Log, TEXT("  --- Functions ---"));
-	for (TFieldIterator<UFunction> FuncIt(Cls); FuncIt; ++FuncIt)
-	{
-		UFunction* Func = *FuncIt;
-		UClass* FuncOwner = Func->GetOwnerClass();
-		if (FuncOwner)
-		{
-			FString PkgName = FuncOwner->GetOutermost()->GetName();
-			if (PkgName.StartsWith(TEXT("/Script/")))
-				continue;
-		}
-
-		FString ParamList;
-		int32 Count = 0;
-		for (TFieldIterator<FProperty> ParamIt(Func); ParamIt; ++ParamIt)
-		{
-			if (ParamIt->HasAnyPropertyFlags(CPF_Parm) && !ParamIt->HasAnyPropertyFlags(CPF_ReturnParm))
-			{
-				if (Count > 0) ParamList += TEXT(", ");
-				ParamList += FString::Printf(TEXT("%s %s"), *ParamIt->GetCPPType(), *ParamIt->GetFName().ToString());
-				Count++;
-			}
-		}
-		UE_LOG(LogWeatherDebug, Log, TEXT("  [func] %s(%s)"), *Func->GetFName().ToString(), *ParamList);
-	}
-
-	UE_LOG(LogWeatherDebug, Log, TEXT("===== %s Properties END ====="), *Label);
 }
 
 // ---- Tick ----
@@ -596,51 +495,59 @@ void AWeatherDebugMenu::OnTimeSliderChanged(float Value)
 
 void AWeatherDebugMenu::OnCloudSliderChanged(float Value)
 {
-	// FIX: Cloud Coverage is on UDW (weather), not UDS (sky)
-	SetFloatProp(UDWActor, FName("Cloud Coverage"), Value);
+	// UDW Cloud Coverage is 0-10 scale
+	const float Scaled = Value * 10.f;
+	SetFloatProp(UDWActor, FName("Cloud Coverage"), Scaled);
+	SetBoolProp(UDWActor, FName("Cloud Coverage - Manual Override"), true);
 	if (CloudValueLabel)
-		CloudValueLabel->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt32(Value * 100.f))));
+		CloudValueLabel->SetText(FText::FromString(FString::Printf(TEXT("%.1f"), Scaled)));
 }
 
 void AWeatherDebugMenu::OnFogSliderChanged(float Value)
 {
-	// FIX: Fog is on UDW (weather), not UDS (sky)
-	SetFloatProp(UDWActor, FName("Fog"), Value);
+	// UDW Fog is 0-10 scale
+	const float Scaled = Value * 10.f;
+	SetFloatProp(UDWActor, FName("Fog"), Scaled);
+	SetBoolProp(UDWActor, FName("Fog - Manual Override"), true);
 	if (FogValueLabel)
-		FogValueLabel->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt32(Value * 100.f))));
+		FogValueLabel->SetText(FText::FromString(FString::Printf(TEXT("%.1f"), Scaled)));
 }
 
 void AWeatherDebugMenu::OnRainSliderChanged(float Value)
 {
+	const float Scaled = Value * 10.f;
 	if (UDWActor)
 	{
-		SetFloatProp(UDWActor, FName("Rain"), Value);
+		SetFloatProp(UDWActor, FName("Rain"), Scaled);
 		SetBoolProp(UDWActor, FName("Rain - Manual Override"), true);
 	}
 	if (RainValueLabel)
-		RainValueLabel->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt32(Value * 100.f))));
+		RainValueLabel->SetText(FText::FromString(FString::Printf(TEXT("%.1f"), Scaled)));
 }
 
 void AWeatherDebugMenu::OnSnowSliderChanged(float Value)
 {
+	const float Scaled = Value * 10.f;
 	if (UDWActor)
 	{
-		SetFloatProp(UDWActor, FName("Snow"), Value);
+		SetFloatProp(UDWActor, FName("Snow"), Scaled);
 		SetBoolProp(UDWActor, FName("Snow - Manual Override"), true);
 	}
 	if (SnowValueLabel)
-		SnowValueLabel->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt32(Value * 100.f))));
+		SnowValueLabel->SetText(FText::FromString(FString::Printf(TEXT("%.1f"), Scaled)));
 }
 
 void AWeatherDebugMenu::OnThunderSliderChanged(float Value)
 {
+	const float Scaled = Value * 10.f;
 	if (UDWActor)
 	{
-		SetFloatProp(UDWActor, FName("Thunder/ Lightning"), Value);
-		SetBoolProp(UDWActor, FName("Thunder/ Lightning - Manual Override"), true);
+		// Correct FName: "Thunder/Lightning" (no space before slash)
+		SetFloatProp(UDWActor, FName("Thunder/Lightning"), Scaled);
+		SetBoolProp(UDWActor, FName("Thunder/Lightning - Manual Override"), true);
 	}
 	if (ThunderValueLabel)
-		ThunderValueLabel->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt32(Value * 100.f))));
+		ThunderValueLabel->SetText(FText::FromString(FString::Printf(TEXT("%.1f"), Scaled)));
 }
 
 void AWeatherDebugMenu::OnDaySpeedSliderChanged(float Value)
