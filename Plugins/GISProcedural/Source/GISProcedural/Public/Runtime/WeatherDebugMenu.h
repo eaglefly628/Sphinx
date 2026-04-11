@@ -5,7 +5,6 @@
 #include "GameFramework/Actor.h"
 #include "WeatherDebugMenu.generated.h"
 
-class UUserWidget;
 class UComboBoxString;
 class USlider;
 class UTextBlock;
@@ -13,9 +12,19 @@ class UButton;
 class UCheckBox;
 
 /**
+ * Concrete UserWidget subclass for the weather debug panel.
+ * Needed because UUserWidget is abstract and cannot be instantiated directly.
+ */
+UCLASS()
+class GISPROCEDURAL_API UWeatherDebugWidget : public UUserWidget
+{
+	GENERATED_BODY()
+};
+
+/**
  * In-game weather debug menu with UMG UI.
  *
- * Drop into level, press F9 to toggle a clean panel with:
+ * Drop into level, press Home to toggle a clean panel with:
  * - Weather preset dropdown
  * - Time of day slider
  * - Cloud/Fog/Rain/Snow/Thunder sliders
@@ -36,9 +45,9 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	/** Key to toggle the debug menu (default: Insert) */
+	/** Key to toggle the debug menu (default: Home) */
 	UPROPERTY(EditAnywhere, Category = "Weather Debug")
-	FKey ToggleKey = EKeys::Insert;
+	FKey ToggleKey = EKeys::Home;
 
 private:
 	// ---- UI ----
@@ -72,7 +81,7 @@ private:
 	// ---- State ----
 	UPROPERTY() TObjectPtr<AActor> UDSActor;
 	UPROPERTY() TObjectPtr<AActor> UDWActor;
-	UPROPERTY() TObjectPtr<UUserWidget> MenuWidget;
+	UPROPERTY() TObjectPtr<UWeatherDebugWidget> MenuWidget;
 
 	bool bMenuVisible = false;
 	bool bToggleWasDown = false;

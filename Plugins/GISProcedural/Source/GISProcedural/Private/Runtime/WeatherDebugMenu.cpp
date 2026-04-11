@@ -100,7 +100,7 @@ void AWeatherDebugMenu::BeginPlay()
 	UE_LOG(LogWeatherDebug, Log, TEXT("===== WeatherDebugMenu ====="));
 	UE_LOG(LogWeatherDebug, Log, TEXT("UDS: %s"), UDSActor ? *UDSActor->GetName() : TEXT("NOT FOUND"));
 	UE_LOG(LogWeatherDebug, Log, TEXT("UDW: %s"), UDWActor ? *UDWActor->GetName() : TEXT("NOT FOUND"));
-	UE_LOG(LogWeatherDebug, Log, TEXT("Press Insert to toggle debug menu"));
+	UE_LOG(LogWeatherDebug, Log, TEXT("Press Home to toggle debug menu"));
 }
 
 // ---- EndPlay ----
@@ -183,8 +183,8 @@ void AWeatherDebugMenu::CreateUI()
 	APlayerController* PC = GetWorld()->GetFirstPlayerController();
 	if (!PC) return;
 
-	// Create empty UserWidget
-	MenuWidget = CreateWidget<UUserWidget>(PC);
+	// Create concrete widget
+	MenuWidget = CreateWidget<UWeatherDebugWidget>(PC);
 	if (!MenuWidget) return;
 
 	UWidgetTree* Tree = MenuWidget->WidgetTree;
