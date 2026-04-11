@@ -352,7 +352,7 @@ void AWeatherDebugMenu::CreateUI()
 		}
 		PresetCombo->SetSelectedOption(GWeatherPresets[0]);
 		// Fix: white foreground so dropdown text is readable on dark background
-		PresetCombo->SetForegroundColor(FSlateColor(FLinearColor::White));
+		PresetCombo->ForegroundColor = FSlateColor(FLinearColor::White);
 		PresetCombo->OnSelectionChanged.AddDynamic(this, &AWeatherDebugMenu::OnPresetChanged);
 		auto* CSlot = VBox->AddChildToVerticalBox(PresetCombo);
 		CSlot->SetPadding(FMargin(0, 0, 0, 8));
