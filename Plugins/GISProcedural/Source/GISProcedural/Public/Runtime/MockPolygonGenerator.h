@@ -78,6 +78,12 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Mock Data|Debug")
 	float DebugDrawDuration = 30.0f;
 
+	UPROPERTY(EditAnywhere, Category = "Mock Data|Debug", meta = (ClampMin = "1.0", ClampMax = "20.0"))
+	float DebugLineThickness = 8.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Mock Data|Debug")
+	float DebugTextScale = 1.5f;
+
 	// ======== Editor Buttons ========
 
 	/** Generate mock polygons and save DataAsset to disk */
@@ -114,6 +120,12 @@ private:
 
 	/** Get color for land use type */
 	static FLinearColor GetColorForType(ELandUseType Type);
+
+	/** Get display name for land use type */
+	static FString GetTypeDisplayName(ELandUseType Type);
+
+	/** Check if a circle at Center with Radius overlaps any existing TempPolygon */
+	bool OverlapsExisting(const FVector& Center, float Radius) const;
 
 	/** Save DataAsset package to disk (editor only) */
 	bool SaveDataAssetToDisk(ULandUseMapDataAsset* Asset);

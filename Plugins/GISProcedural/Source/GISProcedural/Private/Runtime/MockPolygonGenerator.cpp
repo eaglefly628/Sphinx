@@ -148,14 +148,37 @@ void AMockPolygonGenerator::AddPolygonsOfType(
 
 	for (int32 i = 0; i < Count; ++i)
 	{
-		// Random position within area radius
-		const float Angle = FMath::FRandRange(0.0f, 360.0f);
-		const float Dist = FMath::FRandRange(AreaRadius * 0.1f, AreaRadius);
-		const float Rad = FMath::DegreesToRadians(Angle);
-		FVector PolyCenter = AreaCenter + FVector(
-			FMath::Cos(Rad) * Dist,
-			FMath::Sin(Rad) * Dist,
-			0.0f);
+		const float PolyRadius = FMath::FRandRange(PolygonMinRadius, PolygonMaxRadius);
+
+		// Try to find a non-overlapping position (rejection sampling)
+		FVector PolyCenter = FVector::ZeroVector;
+		bool bPlaced = false;
+		constexpr int32 MaxAttempts = 50;
+
+		for (int32 Attempt = 0; Attempt < MaxAttempts; ++Attempt)
+		{
+			const float Angle = FMath::FRandRange(0.0f, 360.0f);
+			const float Dist = FMath::FRandRange(AreaRadius * 0.1f, AreaRadius);
+			const float Rad = FMath::DegreesToRadians(Angle);
+			FVector Candidate = AreaCenter + FVector(
+				FMath::Cos(Rad) * Dist,
+				FMath::Sin(Rad) * Dist,
+				0.0f);
+
+			if (!OverlapsExisting(Candidate, PolyRadius))
+			{
+				PolyCenter = Candidate;
+				bPlaced = true;
+				break;
+			}
+		}
+
+		if (!bPlaced)
+		{
+			UE_LOG(LogGIS, Warning, TEXT("[MockGen] Could not place poly %d (type=%d) without overlap after %d attempts, skipping."),
+				NextID, static_cast<int32>(Type), MaxAttempts);
+			continue;
+		}
 
 		// Ground trace to snap to terrain
 		if (World)
@@ -171,9 +194,6 @@ void AMockPolygonGenerator::AddPolygonsOfType(
 				PolyCenter = HitResult.Location;
 			}
 		}
-
-		// Generate polygon vertices (random convex-ish shape)
-		const float PolyRadius = FMath::FRandRange(PolygonMinRadius, PolygonMaxRadius);
 		const int32 NumVerts = FMath::RandRange(5, 10);
 		TArray<FVector> Verts;
 		Verts.Reserve(NumVerts);
@@ -233,19 +253,28 @@ void AMockPolygonGenerator::DrawAllPolygons()
 	const UWorld* World = GetWorld();
 	if (!World || !DataAsset) return;
 
-	for (const FLandUsePolygon& Poly : DataAsset->Polygons)
+	for (int32 i = 0; i < DataAsset->Polygons.Num(); ++i)
 	{
+		const FLandUsePolygon& Poly = DataAsset->Polygons[i];
 		const FColor Color = GetColorForType(Poly.LandUseType).ToFColor(true);
 		const int32 VertCount = Poly.WorldVertices.Num();
 
+		// Draw polygon edges with thick lines
 		for (int32 v = 0; v < VertCount; ++v)
 		{
 			const int32 Next = (v + 1) % VertCount;
 			const FVector From = Poly.WorldVertices[v] + FVector(0, 0, 50);
 			const FVector To = Poly.WorldVertices[Next] + FVector(0, 0, 50);
-			DrawDebugLine(World, From, To, Color, false, DebugDrawDuration, 0, 3.0f);
+			DrawDebugLine(World, From, To, Color, false, DebugDrawDuration, 0, DebugLineThickness);
 		}
-		DrawDebugPoint(World, Poly.WorldCenter + FVector(0, 0, 100), 10.0f, Color, false, DebugDrawDuration);
+
+		// Draw center point
+		DrawDebugPoint(World, Poly.WorldCenter + FVector(0, 0, 100), 15.0f, Color, false, DebugDrawDuration);
+
+		// Draw text label: "[index] TypeName"
+		const FString Label = FString::Printf(TEXT("[%d] %s"), i, *GetTypeDisplayName(Poly.LandUseType));
+		DrawDebugString(World, Poly.WorldCenter + FVector(0, 0, 200), Label, nullptr,
+			Color, DebugDrawDuration, false, DebugTextScale);
 	}
 }
 
@@ -264,6 +293,40 @@ FLinearColor AMockPolygonGenerator::GetColorForType(ELandUseType Type)
 	case ELandUseType::Military:    return FLinearColor(0.9f, 0.1f, 0.1f, 1.0f);
 	default:                        return FLinearColor::White;
 	}
+}
+
+FString AMockPolygonGenerator::GetTypeDisplayName(ELandUseType Type)
+{
+	switch (Type)
+	{
+	case ELandUseType::Forest:      return TEXT("Forest");
+	case ELandUseType::Residential: return TEXT("Residential");
+	case ELandUseType::Commercial:  return TEXT("Commercial");
+	case ELandUseType::Industrial:  return TEXT("Industrial");
+	case ELandUseType::Farmland:    return TEXT("Farmland");
+	case ELandUseType::OpenSpace:   return TEXT("OpenSpace");
+	case ELandUseType::Water:       return TEXT("Water");
+	case ELandUseType::Road:        return TEXT("Road");
+	case ELandUseType::Military:    return TEXT("Military");
+	default:                        return TEXT("Unknown");
+	}
+}
+
+bool AMockPolygonGenerator::OverlapsExisting(const FVector& Center, float Radius) const
+{
+	for (const FLandUsePolygon& Existing : TempPolygons)
+	{
+		// 2D distance check (ignore Z)
+		const float Dist2D = FVector::Dist2D(Center, Existing.WorldCenter);
+		// Estimate existing polygon's radius from its area: r = sqrt(area_cm2 / pi)
+		// AreaSqM is in m^2, WorldVertices are in cm, so convert: area_cm2 = AreaSqM * 10000
+		const float ExistingRadius = FMath::Sqrt(Existing.AreaSqM * 10000.0f / PI);
+		if (Dist2D < (Radius + ExistingRadius) * 0.85f)
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 bool AMockPolygonGenerator::SaveDataAssetToDisk(ULandUseMapDataAsset* Asset)
