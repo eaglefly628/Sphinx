@@ -1,4 +1,5 @@
 // WeatherDebugMenu.cpp
+// Property discovery + correct UDW targeting + live slider labels
 #include "Runtime/WeatherDebugMenu.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
@@ -69,9 +70,9 @@ static UHorizontalBox* MakeSliderRow(
 	SliderSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 	SliderSlot->SetVerticalAlignment(VAlign_Center);
 
-	// Value text
+	// Value text - initialize with actual percentage
 	OutValueLabel = Tree->ConstructWidget<UTextBlock>();
-	OutValueLabel->SetText(FText::FromString(TEXT("50%")));
+	OutValueLabel->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt32(InitialValue * 100.f))));
 	FSlateFontInfo VFont = OutValueLabel->GetFont();
 	VFont.Size = 10;
 	OutValueLabel->SetFont(VFont);
@@ -97,10 +98,17 @@ void AWeatherDebugMenu::BeginPlay()
 	FindUDS();
 	FindUDW();
 
-	UE_LOG(LogWeatherDebug, Log, TEXT("===== WeatherDebugMenu ====="));
+	UE_LOG(LogWeatherDebug, Log, TEXT("===== WeatherDebugMenu START ====="));
 	UE_LOG(LogWeatherDebug, Log, TEXT("UDS: %s"), UDSActor ? *UDSActor->GetName() : TEXT("NOT FOUND"));
 	UE_LOG(LogWeatherDebug, Log, TEXT("UDW: %s"), UDWActor ? *UDWActor->GetName() : TEXT("NOT FOUND"));
+
+	// Dump all Blueprint-defined properties and functions to log
+	// Search Output Log for "LogWeatherDebug" to find correct FNames
+	DumpActorProperties(UDSActor, TEXT("UDS"));
+	DumpActorProperties(UDWActor, TEXT("UDW"));
+
 	UE_LOG(LogWeatherDebug, Log, TEXT("Press Home to toggle debug menu"));
+	UE_LOG(LogWeatherDebug, Log, TEXT("===== WeatherDebugMenu END ====="));
 }
 
 // ---- EndPlay ----
@@ -108,6 +116,102 @@ void AWeatherDebugMenu::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	RemoveUI();
 	Super::EndPlay(EndPlayReason);
+}
+
+// ---- Property Discovery ----
+void AWeatherDebugMenu::DumpActorProperties(AActor* Actor, const FString& Label)
+{
+	if (!Actor)
+	{
+		UE_LOG(LogWeatherDebug, Warning, TEXT("===== %s: Actor is NULL ====="), *Label);
+		return;
+	}
+
+	UClass* Cls = Actor->GetClass();
+	UE_LOG(LogWeatherDebug, Log, TEXT("===== %s Properties [class: %s] START ====="), *Label, *Cls->GetName());
+
+	// Dump properties - skip core engine C++ classes (package /Script/...)
+	for (TFieldIterator<FProperty> It(Cls); It; ++It)
+	{
+		FProperty* Prop = *It;
+		UClass* OwnerClass = Prop->GetOwnerClass();
+		if (OwnerClass)
+		{
+			FString PkgName = OwnerClass->GetOutermost()->GetName();
+			if (PkgName.StartsWith(TEXT("/Script/")))
+				continue;
+		}
+
+		FString TypeStr;
+		FString ValueStr;
+
+		if (FFloatProperty* FP = CastField<FFloatProperty>(Prop))
+		{
+			TypeStr = TEXT("float");
+			ValueStr = FString::Printf(TEXT("%.4f"), FP->GetPropertyValue_InContainer(Actor));
+		}
+		else if (FDoubleProperty* DP = CastField<FDoubleProperty>(Prop))
+		{
+			TypeStr = TEXT("double");
+			ValueStr = FString::Printf(TEXT("%.4f"), DP->GetPropertyValue_InContainer(Actor));
+		}
+		else if (FBoolProperty* BP = CastField<FBoolProperty>(Prop))
+		{
+			TypeStr = TEXT("bool");
+			ValueStr = BP->GetPropertyValue_InContainer(Actor) ? TEXT("true") : TEXT("false");
+		}
+		else if (FByteProperty* ByteP = CastField<FByteProperty>(Prop))
+		{
+			TypeStr = TEXT("byte");
+			ValueStr = FString::Printf(TEXT("%d"), ByteP->GetPropertyValue_InContainer(Actor));
+		}
+		else if (FIntProperty* IP = CastField<FIntProperty>(Prop))
+		{
+			TypeStr = TEXT("int32");
+			ValueStr = FString::Printf(TEXT("%d"), IP->GetPropertyValue_InContainer(Actor));
+		}
+		else if (FStructProperty* SP = CastField<FStructProperty>(Prop))
+		{
+			TypeStr = FString::Printf(TEXT("struct:%s"), *SP->Struct->GetName());
+			ValueStr = TEXT("(struct)");
+		}
+		else
+		{
+			TypeStr = Prop->GetCPPType();
+			ValueStr = TEXT("(...)");
+		}
+
+		UE_LOG(LogWeatherDebug, Log, TEXT("  [%s] %s = %s"), *TypeStr, *Prop->GetFName().ToString(), *ValueStr);
+	}
+
+	// Dump functions - helps discover callable BP functions like "Change Weather"
+	UE_LOG(LogWeatherDebug, Log, TEXT("  --- Functions ---"));
+	for (TFieldIterator<UFunction> FuncIt(Cls); FuncIt; ++FuncIt)
+	{
+		UFunction* Func = *FuncIt;
+		UClass* FuncOwner = Func->GetOwnerClass();
+		if (FuncOwner)
+		{
+			FString PkgName = FuncOwner->GetOutermost()->GetName();
+			if (PkgName.StartsWith(TEXT("/Script/")))
+				continue;
+		}
+
+		FString ParamList;
+		int32 Count = 0;
+		for (TFieldIterator<FProperty> ParamIt(Func); ParamIt; ++ParamIt)
+		{
+			if (ParamIt->HasAnyPropertyFlags(CPF_Parm) && !ParamIt->HasAnyPropertyFlags(CPF_ReturnParm))
+			{
+				if (Count > 0) ParamList += TEXT(", ");
+				ParamList += FString::Printf(TEXT("%s %s"), *ParamIt->GetCPPType(), *ParamIt->GetFName().ToString());
+				Count++;
+			}
+		}
+		UE_LOG(LogWeatherDebug, Log, TEXT("  [func] %s(%s)"), *Func->GetFName().ToString(), *ParamList);
+	}
+
+	UE_LOG(LogWeatherDebug, Log, TEXT("===== %s Properties END ====="), *Label);
 }
 
 // ---- Tick ----
@@ -247,6 +351,8 @@ void AWeatherDebugMenu::CreateUI()
 			PresetCombo->AddOption(P);
 		}
 		PresetCombo->SetSelectedOption(GWeatherPresets[0]);
+		// Fix: white foreground so dropdown text is readable on dark background
+		PresetCombo->SetForegroundColor(FSlateColor(FLinearColor::White));
 		PresetCombo->OnSelectionChanged.AddDynamic(this, &AWeatherDebugMenu::OnPresetChanged);
 		auto* CSlot = VBox->AddChildToVerticalBox(PresetCombo);
 		CSlot->SetPadding(FMargin(0, 0, 0, 8));
@@ -254,9 +360,7 @@ void AWeatherDebugMenu::CreateUI()
 
 	// ---- Time of Day ----
 	{
-		UTextBlock* ValLabel = nullptr;
-		UHorizontalBox* Row = MakeSliderRow(Tree, TEXT("Time of Day"), TimeSlider, ValLabel, 0.5f);
-		TimeLabel = ValLabel;
+		UHorizontalBox* Row = MakeSliderRow(Tree, TEXT("Time of Day"), TimeSlider, TimeLabel, 0.5f);
 		TimeSlider->OnValueChanged.AddDynamic(this, &AWeatherDebugMenu::OnTimeSliderChanged);
 		auto* Slot = VBox->AddChildToVerticalBox(Row);
 		Slot->SetPadding(FMargin(0, 2, 0, 2));
@@ -286,24 +390,21 @@ void AWeatherDebugMenu::CreateUI()
 
 	// ---- Day/Night Speed ----
 	{
-		UTextBlock* ValLabel = nullptr;
-		UHorizontalBox* Row = MakeSliderRow(Tree, TEXT("Day Length (min)"), DaySpeedSlider, ValLabel, 0.1f);
+		UHorizontalBox* Row = MakeSliderRow(Tree, TEXT("Day Length (min)"), DaySpeedSlider, DaySpeedValueLabel, 0.1f);
 		DaySpeedSlider->OnValueChanged.AddDynamic(this, &AWeatherDebugMenu::OnDaySpeedSliderChanged);
 		auto* Slot = VBox->AddChildToVerticalBox(Row);
 		Slot->SetPadding(FMargin(0, 2, 0, 2));
 	}
 	{
-		UTextBlock* ValLabel = nullptr;
-		UHorizontalBox* Row = MakeSliderRow(Tree, TEXT("Night Length (min)"), NightSpeedSlider, ValLabel, 0.1f);
+		UHorizontalBox* Row = MakeSliderRow(Tree, TEXT("Night Length (min)"), NightSpeedSlider, NightSpeedValueLabel, 0.1f);
 		NightSpeedSlider->OnValueChanged.AddDynamic(this, &AWeatherDebugMenu::OnNightSpeedSliderChanged);
 		auto* Slot = VBox->AddChildToVerticalBox(Row);
 		Slot->SetPadding(FMargin(0, 2, 0, 4));
 	}
 
-	// ---- Cloud Coverage ----
+	// ---- Cloud Coverage (UDW controls weather, not UDS) ----
 	{
-		UTextBlock* ValLabel = nullptr;
-		UHorizontalBox* Row = MakeSliderRow(Tree, TEXT("Cloud Coverage"), CloudSlider, ValLabel, 0.5f);
+		UHorizontalBox* Row = MakeSliderRow(Tree, TEXT("Cloud Coverage"), CloudSlider, CloudValueLabel, 0.5f);
 		CloudSlider->OnValueChanged.AddDynamic(this, &AWeatherDebugMenu::OnCloudSliderChanged);
 		auto* Slot = VBox->AddChildToVerticalBox(Row);
 		Slot->SetPadding(FMargin(0, 2, 0, 2));
@@ -311,8 +412,7 @@ void AWeatherDebugMenu::CreateUI()
 
 	// ---- Fog ----
 	{
-		UTextBlock* ValLabel = nullptr;
-		UHorizontalBox* Row = MakeSliderRow(Tree, TEXT("Fog"), FogSlider, ValLabel, 0.0f);
+		UHorizontalBox* Row = MakeSliderRow(Tree, TEXT("Fog"), FogSlider, FogValueLabel, 0.0f);
 		FogSlider->OnValueChanged.AddDynamic(this, &AWeatherDebugMenu::OnFogSliderChanged);
 		auto* Slot = VBox->AddChildToVerticalBox(Row);
 		Slot->SetPadding(FMargin(0, 2, 0, 2));
@@ -320,8 +420,7 @@ void AWeatherDebugMenu::CreateUI()
 
 	// ---- Rain ----
 	{
-		UTextBlock* ValLabel = nullptr;
-		UHorizontalBox* Row = MakeSliderRow(Tree, TEXT("Rain"), RainSlider, ValLabel, 0.0f);
+		UHorizontalBox* Row = MakeSliderRow(Tree, TEXT("Rain"), RainSlider, RainValueLabel, 0.0f);
 		RainSlider->OnValueChanged.AddDynamic(this, &AWeatherDebugMenu::OnRainSliderChanged);
 		auto* Slot = VBox->AddChildToVerticalBox(Row);
 		Slot->SetPadding(FMargin(0, 2, 0, 2));
@@ -329,8 +428,7 @@ void AWeatherDebugMenu::CreateUI()
 
 	// ---- Snow ----
 	{
-		UTextBlock* ValLabel = nullptr;
-		UHorizontalBox* Row = MakeSliderRow(Tree, TEXT("Snow"), SnowSlider, ValLabel, 0.0f);
+		UHorizontalBox* Row = MakeSliderRow(Tree, TEXT("Snow"), SnowSlider, SnowValueLabel, 0.0f);
 		SnowSlider->OnValueChanged.AddDynamic(this, &AWeatherDebugMenu::OnSnowSliderChanged);
 		auto* Slot = VBox->AddChildToVerticalBox(Row);
 		Slot->SetPadding(FMargin(0, 2, 0, 2));
@@ -338,8 +436,7 @@ void AWeatherDebugMenu::CreateUI()
 
 	// ---- Thunder ----
 	{
-		UTextBlock* ValLabel = nullptr;
-		UHorizontalBox* Row = MakeSliderRow(Tree, TEXT("Thunder"), ThunderSlider, ValLabel, 0.0f);
+		UHorizontalBox* Row = MakeSliderRow(Tree, TEXT("Thunder"), ThunderSlider, ThunderValueLabel, 0.0f);
 		ThunderSlider->OnValueChanged.AddDynamic(this, &AWeatherDebugMenu::OnThunderSliderChanged);
 		auto* Slot = VBox->AddChildToVerticalBox(Row);
 		Slot->SetPadding(FMargin(0, 2, 0, 8));
@@ -389,7 +486,7 @@ void AWeatherDebugMenu::RemoveUI()
 	bUICreated = false;
 }
 
-// ---- Update display values from UDS ----
+// ---- Update display values from UDS/UDW ----
 void AWeatherDebugMenu::UpdateUIValues()
 {
 	if (!UDSActor) return;
@@ -447,12 +544,14 @@ void AWeatherDebugMenu::SetBoolProp(AActor* Actor, FName Name, bool Value)
 	FBoolProperty* BP = CastField<FBoolProperty>(Actor->GetClass()->FindPropertyByName(Name));
 	if (BP)
 		BP->SetPropertyValue_InContainer(Actor, Value);
+	else
+		UE_LOG(LogWeatherDebug, Warning, TEXT("Bool prop '%s' not found on %s"), *Name.ToString(), *Actor->GetName());
 }
 
 // ---- Callbacks ----
 void AWeatherDebugMenu::OnPresetChanged(FString Item, ESelectInfo::Type SelectionType)
 {
-	// Map preset name to UDS/UDW values
+	// Map preset name to UDW weather values
 	int32 Idx = GWeatherPresets.IndexOfByKey(Item);
 	UE_LOG(LogWeatherDebug, Log, TEXT("Preset: %s (%d)"), *Item, Idx);
 
@@ -492,16 +591,23 @@ void AWeatherDebugMenu::OnTimeSliderChanged(float Value)
 {
 	float TOD = Value * 2400.f;
 	SetFloatProp(UDSActor, FName("Time Of Day"), TOD);
+	// TimeLabel updated in UpdateUIValues() every tick
 }
 
 void AWeatherDebugMenu::OnCloudSliderChanged(float Value)
 {
-	SetFloatProp(UDSActor, FName("Cloud Coverage"), Value);
+	// FIX: Cloud Coverage is on UDW (weather), not UDS (sky)
+	SetFloatProp(UDWActor, FName("Cloud Coverage"), Value);
+	if (CloudValueLabel)
+		CloudValueLabel->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt32(Value * 100.f))));
 }
 
 void AWeatherDebugMenu::OnFogSliderChanged(float Value)
 {
-	SetFloatProp(UDSActor, FName("Fog"), Value);
+	// FIX: Fog is on UDW (weather), not UDS (sky)
+	SetFloatProp(UDWActor, FName("Fog"), Value);
+	if (FogValueLabel)
+		FogValueLabel->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt32(Value * 100.f))));
 }
 
 void AWeatherDebugMenu::OnRainSliderChanged(float Value)
@@ -511,6 +617,8 @@ void AWeatherDebugMenu::OnRainSliderChanged(float Value)
 		SetFloatProp(UDWActor, FName("Rain"), Value);
 		SetBoolProp(UDWActor, FName("Rain - Manual Override"), true);
 	}
+	if (RainValueLabel)
+		RainValueLabel->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt32(Value * 100.f))));
 }
 
 void AWeatherDebugMenu::OnSnowSliderChanged(float Value)
@@ -520,6 +628,8 @@ void AWeatherDebugMenu::OnSnowSliderChanged(float Value)
 		SetFloatProp(UDWActor, FName("Snow"), Value);
 		SetBoolProp(UDWActor, FName("Snow - Manual Override"), true);
 	}
+	if (SnowValueLabel)
+		SnowValueLabel->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt32(Value * 100.f))));
 }
 
 void AWeatherDebugMenu::OnThunderSliderChanged(float Value)
@@ -529,6 +639,8 @@ void AWeatherDebugMenu::OnThunderSliderChanged(float Value)
 		SetFloatProp(UDWActor, FName("Thunder/ Lightning"), Value);
 		SetBoolProp(UDWActor, FName("Thunder/ Lightning - Manual Override"), true);
 	}
+	if (ThunderValueLabel)
+		ThunderValueLabel->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), FMath::RoundToInt32(Value * 100.f))));
 }
 
 void AWeatherDebugMenu::OnDaySpeedSliderChanged(float Value)
@@ -536,12 +648,16 @@ void AWeatherDebugMenu::OnDaySpeedSliderChanged(float Value)
 	// 0..1 maps to 0.01..10 minutes
 	float Minutes = FMath::Lerp(0.01f, 10.f, Value);
 	SetFloatProp(UDSActor, FName("Day Length"), Minutes);
+	if (DaySpeedValueLabel)
+		DaySpeedValueLabel->SetText(FText::FromString(FString::Printf(TEXT("%.1fm"), Minutes)));
 }
 
 void AWeatherDebugMenu::OnNightSpeedSliderChanged(float Value)
 {
 	float Minutes = FMath::Lerp(0.01f, 10.f, Value);
 	SetFloatProp(UDSActor, FName("Night Length"), Minutes);
+	if (NightSpeedValueLabel)
+		NightSpeedValueLabel->SetText(FText::FromString(FString::Printf(TEXT("%.1fm"), Minutes)));
 }
 
 void AWeatherDebugMenu::OnDayClicked()
