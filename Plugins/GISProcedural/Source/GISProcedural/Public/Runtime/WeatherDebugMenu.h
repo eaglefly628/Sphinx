@@ -101,4 +101,16 @@ private:
 	UPROPERTY() UTextBlock* TimeLabel = nullptr;
 	UPROPERTY() UTextBlock* StatusLabel = nullptr;
 	UPROPERTY() UCheckBox* AnimateCheck = nullptr;
+
+	// Slider value labels (stored so callbacks can update them)
+	UPROPERTY() UTextBlock* CloudValueLabel = nullptr;
+	UPROPERTY() UTextBlock* FogValueLabel = nullptr;
+	UPROPERTY() UTextBlock* RainValueLabel = nullptr;
+	UPROPERTY() UTextBlock* SnowValueLabel = nullptr;
+	UPROPERTY() UTextBlock* ThunderValueLabel = nullptr;
+	UPROPERTY() UTextBlock* DaySpeedValueLabel = nullptr;
+	UPROPERTY() UTextBlock* NightSpeedValueLabel = nullptr;
+
+	// Property discovery - dumps all UDS/UDW properties + functions to log
+	void DumpActorProperties(AActor* Actor, const FString& Label);
 };
