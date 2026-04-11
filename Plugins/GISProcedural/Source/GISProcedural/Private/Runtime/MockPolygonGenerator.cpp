@@ -125,11 +125,26 @@ void AMockPolygonGenerator::DrawPolygons()
 		UE_LOG(LogGIS, Warning, TEXT("[MockGen] No data to draw."));
 		return;
 	}
+	// Clear old persistent draws before redrawing
+	if (const UWorld* World = GetWorld())
+	{
+		FlushPersistentDebugLines(World);
+	}
 	DrawAllPolygons();
+}
+
+void AMockPolygonGenerator::ClearDebugDraw()
+{
+	if (const UWorld* World = GetWorld())
+	{
+		FlushPersistentDebugLines(World);
+		UE_LOG(LogGIS, Log, TEXT("[MockGen] Debug draw cleared."));
+	}
 }
 
 void AMockPolygonGenerator::ClearData()
 {
+	ClearDebugDraw();
 	if (DataAsset)
 	{
 		DataAsset->Polygons.Empty();
@@ -148,103 +163,109 @@ void AMockPolygonGenerator::AddPolygonsOfType(
 
 	for (int32 i = 0; i < Count; ++i)
 	{
-		const float PolyRadius = FMath::FRandRange(PolygonMinRadius, PolygonMaxRadius);
-
-		// Try to find a non-overlapping position (rejection sampling)
-		FVector PolyCenter = FVector::ZeroVector;
-		bool bPlaced = false;
 		constexpr int32 MaxAttempts = 50;
+		bool bPlaced = false;
 
 		for (int32 Attempt = 0; Attempt < MaxAttempts; ++Attempt)
 		{
+			// Random center candidate
 			const float Angle = FMath::FRandRange(0.0f, 360.0f);
 			const float Dist = FMath::FRandRange(AreaRadius * 0.1f, AreaRadius);
 			const float Rad = FMath::DegreesToRadians(Angle);
-			FVector Candidate = AreaCenter + FVector(
+			FVector PolyCenter = AreaCenter + FVector(
 				FMath::Cos(Rad) * Dist,
 				FMath::Sin(Rad) * Dist,
 				0.0f);
 
-			if (!OverlapsExisting(Candidate, PolyRadius))
+			// Generate vertices around this candidate
+			const float PolyRadius = FMath::FRandRange(PolygonMinRadius, PolygonMaxRadius);
+			const int32 NumVerts = FMath::RandRange(5, 10);
+			TArray<FVector> Verts;
+			Verts.Reserve(NumVerts);
+
+			for (int32 v = 0; v < NumVerts; ++v)
 			{
-				PolyCenter = Candidate;
-				bPlaced = true;
-				break;
+				const float VAngle = (static_cast<float>(v) / static_cast<float>(NumVerts)) * 360.0f;
+				const float VRad = FMath::DegreesToRadians(VAngle);
+				const float Jitter = FMath::FRandRange(0.7f, 1.3f);
+				Verts.Add(PolyCenter + FVector(
+					FMath::Cos(VRad) * PolyRadius * Jitter,
+					FMath::Sin(VRad) * PolyRadius * Jitter,
+					0.0f));
 			}
+
+			// Compute actual AABB from vertices
+			FBox CandidateBounds(Verts[0], Verts[0]);
+			for (int32 v = 1; v < Verts.Num(); ++v)
+			{
+				CandidateBounds.Min.X = FMath::Min(CandidateBounds.Min.X, Verts[v].X);
+				CandidateBounds.Min.Y = FMath::Min(CandidateBounds.Min.Y, Verts[v].Y);
+				CandidateBounds.Min.Z = FMath::Min(CandidateBounds.Min.Z, Verts[v].Z);
+				CandidateBounds.Max.X = FMath::Max(CandidateBounds.Max.X, Verts[v].X);
+				CandidateBounds.Max.Y = FMath::Max(CandidateBounds.Max.Y, Verts[v].Y);
+				CandidateBounds.Max.Z = FMath::Max(CandidateBounds.Max.Z, Verts[v].Z);
+			}
+
+			// Check AABB overlap against all existing polygons
+			if (OverlapsExisting(CandidateBounds))
+			{
+				continue;
+			}
+
+			// Ground trace to snap center to terrain
+			if (World)
+			{
+				const FVector TraceStart(PolyCenter.X, PolyCenter.Y, PolyCenter.Z + 100000.0f);
+				const FVector TraceEnd(PolyCenter.X, PolyCenter.Y, PolyCenter.Z - 100000.0f);
+				FHitResult HitResult;
+				FCollisionQueryParams QueryParams;
+				QueryParams.AddIgnoredActor(this);
+				if (World->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd,
+					ECC_Visibility, QueryParams))
+				{
+					PolyCenter = HitResult.Location;
+				}
+			}
+
+			// Compute area from actual vertices (Shoelace formula, 2D projection)
+			float AreaSum = 0.0f;
+			for (int32 v = 0; v < Verts.Num(); ++v)
+			{
+				const int32 Next = (v + 1) % Verts.Num();
+				AreaSum += Verts[v].X * Verts[Next].Y - Verts[Next].X * Verts[v].Y;
+			}
+			const float AreaCm2 = FMath::Abs(AreaSum) * 0.5f;
+			const float AreaSqM = AreaCm2 / 10000.0f; // cm^2 -> m^2
+
+			// Build polygon struct
+			FLandUsePolygon Poly;
+			Poly.PolygonID = NextID;
+			Poly.TileCoord = FIntPoint(0, 0);
+			Poly.LandUseType = Type;
+			Poly.WorldVertices = MoveTemp(Verts);
+			Poly.AreaSqM = AreaSqM;
+			Poly.WorldCenter = PolyCenter;
+			Poly.WorldBounds = CandidateBounds;
+			Poly.AvgElevation = PolyCenter.Z / 100.0f;
+			Poly.AvgSlope = FMath::FRandRange(0.0f, 15.0f);
+			Poly.bAdjacentToMainRoad = (FMath::RandRange(0, 3) == 0);
+			Poly.BuildingDensity = FMath::Clamp(BuildDensity + FMath::FRandRange(-0.1f, 0.1f), 0.0f, 1.0f);
+			Poly.VegetationDensity = FMath::Clamp(VegDensity + FMath::FRandRange(-0.1f, 0.1f), 0.0f, 1.0f);
+			Poly.MinFloors = MinFloors;
+			Poly.MaxFloors = MaxFloors;
+			Poly.BuildingSetback = Setback;
+
+			TempPolygons.Add(MoveTemp(Poly));
+			NextID++;
+			bPlaced = true;
+			break;
 		}
 
 		if (!bPlaced)
 		{
 			UE_LOG(LogGIS, Warning, TEXT("[MockGen] Could not place poly %d (type=%d) without overlap after %d attempts, skipping."),
 				NextID, static_cast<int32>(Type), MaxAttempts);
-			continue;
 		}
-
-		// Ground trace to snap to terrain
-		if (World)
-		{
-			const FVector TraceStart(PolyCenter.X, PolyCenter.Y, PolyCenter.Z + 100000.0f);
-			const FVector TraceEnd(PolyCenter.X, PolyCenter.Y, PolyCenter.Z - 100000.0f);
-			FHitResult HitResult;
-			FCollisionQueryParams QueryParams;
-			QueryParams.AddIgnoredActor(this);
-			if (World->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd,
-				ECC_Visibility, QueryParams))
-			{
-				PolyCenter = HitResult.Location;
-			}
-		}
-		const int32 NumVerts = FMath::RandRange(5, 10);
-		TArray<FVector> Verts;
-		Verts.Reserve(NumVerts);
-
-		for (int32 v = 0; v < NumVerts; ++v)
-		{
-			const float VAngle = (static_cast<float>(v) / static_cast<float>(NumVerts)) * 360.0f;
-			const float VRad = FMath::DegreesToRadians(VAngle);
-			const float Jitter = FMath::FRandRange(0.7f, 1.3f);
-			Verts.Add(PolyCenter + FVector(
-				FMath::Cos(VRad) * PolyRadius * Jitter,
-				FMath::Sin(VRad) * PolyRadius * Jitter,
-				0.0f));
-		}
-
-		// Compute AABB
-		FVector BMin = Verts[0];
-		FVector BMax = Verts[0];
-		for (int32 v = 1; v < Verts.Num(); ++v)
-		{
-			BMin.X = FMath::Min(BMin.X, Verts[v].X);
-			BMin.Y = FMath::Min(BMin.Y, Verts[v].Y);
-			BMin.Z = FMath::Min(BMin.Z, Verts[v].Z);
-			BMax.X = FMath::Max(BMax.X, Verts[v].X);
-			BMax.Y = FMath::Max(BMax.Y, Verts[v].Y);
-			BMax.Z = FMath::Max(BMax.Z, Verts[v].Z);
-		}
-
-		// Approximate area (pi * r^2, radius in meters = radius/100)
-		const float AreaSqM = PI * (PolyRadius / 100.0f) * (PolyRadius / 100.0f);
-
-		// Build polygon struct
-		FLandUsePolygon Poly;
-		Poly.PolygonID = NextID;
-		Poly.TileCoord = FIntPoint(0, 0);
-		Poly.LandUseType = Type;
-		Poly.WorldVertices = MoveTemp(Verts);
-		Poly.AreaSqM = AreaSqM;
-		Poly.WorldCenter = PolyCenter;
-		Poly.WorldBounds = FBox(BMin, BMax);
-		Poly.AvgElevation = PolyCenter.Z / 100.0f;
-		Poly.AvgSlope = FMath::FRandRange(0.0f, 15.0f);
-		Poly.bAdjacentToMainRoad = (FMath::RandRange(0, 3) == 0);
-		Poly.BuildingDensity = FMath::Clamp(BuildDensity + FMath::FRandRange(-0.1f, 0.1f), 0.0f, 1.0f);
-		Poly.VegetationDensity = FMath::Clamp(VegDensity + FMath::FRandRange(-0.1f, 0.1f), 0.0f, 1.0f);
-		Poly.MinFloors = MinFloors;
-		Poly.MaxFloors = MaxFloors;
-		Poly.BuildingSetback = Setback;
-
-		TempPolygons.Add(MoveTemp(Poly));
-		NextID++;
 	}
 }
 
@@ -259,23 +280,26 @@ void AMockPolygonGenerator::DrawAllPolygons()
 		const FColor Color = GetColorForType(Poly.LandUseType).ToFColor(true);
 		const int32 VertCount = Poly.WorldVertices.Num();
 
-		// Draw polygon edges with thick lines
+		// Draw polygon edges with thick persistent lines
 		for (int32 v = 0; v < VertCount; ++v)
 		{
 			const int32 Next = (v + 1) % VertCount;
 			const FVector From = Poly.WorldVertices[v] + FVector(0, 0, 50);
 			const FVector To = Poly.WorldVertices[Next] + FVector(0, 0, 50);
-			DrawDebugLine(World, From, To, Color, false, DebugDrawDuration, 0, DebugLineThickness);
+			DrawDebugLine(World, From, To, Color, /*bPersistent=*/true, -1.0f, 0, DebugLineThickness);
 		}
 
 		// Draw center point
-		DrawDebugPoint(World, Poly.WorldCenter + FVector(0, 0, 100), 15.0f, Color, false, DebugDrawDuration);
+		DrawDebugPoint(World, Poly.WorldCenter + FVector(0, 0, 100), 20.0f, Color, /*bPersistent=*/true, -1.0f);
 
-		// Draw text label: "[index] TypeName"
+		// Draw text label: "[index] TypeName" with shadow for visibility
 		const FString Label = FString::Printf(TEXT("[%d] %s"), i, *GetTypeDisplayName(Poly.LandUseType));
-		DrawDebugString(World, Poly.WorldCenter + FVector(0, 0, 200), Label, nullptr,
-			Color, DebugDrawDuration, false, DebugTextScale);
+		DrawDebugString(World, Poly.WorldCenter + FVector(0, 0, DebugTextHeight), Label, nullptr,
+			Color, -1.0f, /*bDrawShadow=*/true, DebugTextScale);
 	}
+
+	UE_LOG(LogGIS, Log, TEXT("[MockGen] Drew %d polygons (persistent). Use 'Clear Debug Draw' to remove."),
+		DataAsset->Polygons.Num());
 }
 
 FLinearColor AMockPolygonGenerator::GetColorForType(ELandUseType Type)
@@ -312,16 +336,15 @@ FString AMockPolygonGenerator::GetTypeDisplayName(ELandUseType Type)
 	}
 }
 
-bool AMockPolygonGenerator::OverlapsExisting(const FVector& Center, float Radius) const
+bool AMockPolygonGenerator::OverlapsExisting(const FBox& CandidateBounds) const
 {
 	for (const FLandUsePolygon& Existing : TempPolygons)
 	{
-		// 2D distance check (ignore Z)
-		const float Dist2D = FVector::Dist2D(Center, Existing.WorldCenter);
-		// Estimate existing polygon's radius from its area: r = sqrt(area_cm2 / pi)
-		// AreaSqM is in m^2, WorldVertices are in cm, so convert: area_cm2 = AreaSqM * 10000
-		const float ExistingRadius = FMath::Sqrt(Existing.AreaSqM * 10000.0f / PI);
-		if (Dist2D < (Radius + ExistingRadius) * 0.85f)
+		// 2D AABB intersection test (ignore Z)
+		if (CandidateBounds.Min.X < Existing.WorldBounds.Max.X &&
+			CandidateBounds.Max.X > Existing.WorldBounds.Min.X &&
+			CandidateBounds.Min.Y < Existing.WorldBounds.Max.Y &&
+			CandidateBounds.Max.Y > Existing.WorldBounds.Min.Y)
 		{
 			return true;
 		}

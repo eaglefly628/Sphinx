@@ -72,17 +72,19 @@ public:
 
 	// ======== Debug ========
 
+	/** Auto-draw after generation */
 	UPROPERTY(EditAnywhere, Category = "Mock Data|Debug")
 	bool bDrawDebugPolygons = true;
-
-	UPROPERTY(EditAnywhere, Category = "Mock Data|Debug")
-	float DebugDrawDuration = 30.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Mock Data|Debug", meta = (ClampMin = "1.0", ClampMax = "20.0"))
 	float DebugLineThickness = 8.0f;
 
-	UPROPERTY(EditAnywhere, Category = "Mock Data|Debug")
-	float DebugTextScale = 1.5f;
+	UPROPERTY(EditAnywhere, Category = "Mock Data|Debug", meta = (ClampMin = "0.5", ClampMax = "5.0"))
+	float DebugTextScale = 2.0f;
+
+	/** Height offset for text labels above polygon center (cm) */
+	UPROPERTY(EditAnywhere, Category = "Mock Data|Debug", meta = (ClampMin = "100.0"))
+	float DebugTextHeight = 500.0f;
 
 	// ======== Editor Buttons ========
 
@@ -94,11 +96,15 @@ public:
 	UFUNCTION(CallInEditor, Category = "Mock Data")
 	void CreateAndSaveNewDataAsset();
 
-	/** Draw debug visualization of all polygons */
+	/** Draw persistent debug visualization of all polygons */
 	UFUNCTION(CallInEditor, Category = "Mock Data")
 	void DrawPolygons();
 
-	/** Clear all polygon data */
+	/** Clear persistent debug draw lines */
+	UFUNCTION(CallInEditor, Category = "Mock Data")
+	void ClearDebugDraw();
+
+	/** Clear all polygon data and debug draw */
 	UFUNCTION(CallInEditor, Category = "Mock Data")
 	void ClearData();
 
@@ -124,8 +130,8 @@ private:
 	/** Get display name for land use type */
 	static FString GetTypeDisplayName(ELandUseType Type);
 
-	/** Check if a circle at Center with Radius overlaps any existing TempPolygon */
-	bool OverlapsExisting(const FVector& Center, float Radius) const;
+	/** Check if candidate AABB overlaps any existing TempPolygon's WorldBounds */
+	bool OverlapsExisting(const FBox& CandidateBounds) const;
 
 	/** Save DataAsset package to disk (editor only) */
 	bool SaveDataAssetToDisk(ULandUseMapDataAsset* Asset);
