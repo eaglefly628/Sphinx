@@ -44,10 +44,10 @@ public:
 	// ======== Count Config ========
 
 	UPROPERTY(EditAnywhere, Category = "Mock Data|Counts")
-	int32 ForestCount = 8;
+	int32 ForestCount = 6;
 
 	UPROPERTY(EditAnywhere, Category = "Mock Data|Counts")
-	int32 ResidentialCount = 5;
+	int32 ResidentialCount = 4;
 
 	UPROPERTY(EditAnywhere, Category = "Mock Data|Counts")
 	int32 CommercialCount = 3;
