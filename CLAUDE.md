@@ -108,7 +108,7 @@ python Tools/GISPreprocess/preprocess.py --input ./RawData --output ./Output \
 
 ## Design Principles
 
-- **AngelScript 优先**：引擎已集成 AngelScript，新功能优先用 AngelScript（不编译）实现；仅在 AngelScript 无法满足性能/底层需求时才用 C++。现有 C++ 模块保持不变，新增游戏逻辑/编辑器工具/蓝图替代层用 AngelScript
+- **C++ LiveCoding 优先**：所有新功能用 C++ 实现，利用 UE5 LiveCoding（Ctrl+Alt+F11）热重载加速迭代；AngelScript 仅用于快速原型验证，不作为正式代码路径
 - 接口优先：新数据源实现 IGISDataProvider，不改上层代码
 - 零 GDAL 运行时：UE5 插件永远不依赖 GDAL，所有栅格处理在 Python 预处理完成
 - 软依赖：WITH_CESIUM 条件编译，不装 Cesium 不影响任何现有功能
