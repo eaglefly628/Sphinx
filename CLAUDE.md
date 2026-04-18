@@ -34,7 +34,8 @@
 - **工具**: `Tools/GISPreprocess/` (Python 3.10+)
 - **测试**: `python3 Tests/test_pipeline.py && python3 Tests/test_cesium_bridge.py`
 - **文档**: `Plugins/GISProcedural/README.md` (EN) / `README_CN.md` (CN) / `GISProcedural_使用手册.md`
-- **计划**: `PLAN.md` (Phase 0-4 全部完成)
+- **计划**: `PLAN.md` (Phase 0-4 完成, Phase 5-9 语义化数字地球 v2.0)
+- **架构演进**: `docs/ARCHITECTURE_v2.md` (v1.0→v2.0 迁移路径)
 
 ## 架构
 
@@ -152,9 +153,16 @@ agents/
 
 ## 当前状态
 
-Phase 0-4 全部完成 ✅
+Phase 0-4 全部完成 ✅（GIS 程序化生成 v1.0）
 
-待讨论/实现:
-- 立交桥/涵洞 PCG 生成（需 bridge/tunnel 标签提取 + LayerIndex 分离）
-- 道路 Spline Mesh 生成
-- 水体 Mesh 生成
+**v2.0 语义化数字地球 — 开发中**
+- 架构演进详见 `docs/ARCHITECTURE_v2.md`
+- 核心转变：GeoParquet + 3D Tiles + DuckDB + 视算分离
+- 当前阶段：Phase 5（1km² 高保真原型）
+
+v2.0 阶段概览:
+- Phase 5: 1km² 原型 — 打通 GeoParquet→3DTiles→Cesium→DuckDB 全链路
+- Phase 6: 自动化管线 + 城市级扩展
+- Phase 7: 载具系统 + 动态轨迹
+- Phase 8: 高精度子关卡替换
+- Phase 9: AI 视觉识别 + 数据闭环（远期）

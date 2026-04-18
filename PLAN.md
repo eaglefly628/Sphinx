@@ -312,3 +312,147 @@ class UTiledLandUseMapDataAsset : public UDataAsset
 - Mercator 往返精度 ~0.5cm @ 70km
 - PCG LOD 距离分类逻辑正确
 - 高程准确性（合成地形验证）
+
+---
+
+# 语义化数字地球 v2.0 — 演进计划
+
+> 架构设计详见 `docs/ARCHITECTURE_v2.md`
+
+**愿景**：从 GIS 程序化生成系统演进为全球语义化数字孪生。
+核心转变：GeoParquet 数据仓库 + 3D Tiles 渲染 + DuckDB 语义查询 + 视算分离。
+
+---
+
+### Phase 5：1km² 高保真原型 — 程序化生成闭环
+
+**目标**：小范围内打通"数据存储 → 3D Tiles → 程序化生成 → 语义查询"完整链路。
+
+#### 5.1 数据层（pipeline）
+
+| 任务 | 说明 |
+|------|------|
+| 截取 1km² OSM 矢量数据 | 选定区域（建议含建筑/道路/水体/绿地） |
+| 搭建 GeoParquet 存储 | 建筑、道路、水体、植被的丰富属性 → GeoParquet |
+| 几何提取 + Feature ID | GeoPandas 提取纯几何 + 高度，注入整型 Feature ID |
+| Py3DTiles 切片 | 生成本地 3D Tiles（.glb + EXT_mesh_features） |
+| DuckDB Web API | Python/Node.js 查询服务，Feature ID → JSON 属性 |
+
+#### 5.2 渲染层（runtime）
+
+| 任务 | 说明 |
+|------|------|
+| Cesium 3D Tiles 加载 | ACesium3DTileset + 本地 HTTP 服务流送 |
+| 建筑程序化材质 | World Aligned Texture：窗户、砖块自动附着白模 |
+| 道路程序化 Shader | 动态道路材质（贴地验证 R4 风险） |
+| 水体程序化 Shader | 动态水面波纹（接缝验证 R5 风险） |
+| Niagara + HISM 植被 | 绿地范围 GPU 实例化树木草皮（速度验证 R2 风险） |
+
+#### 5.3 交互层（runtime）
+
+| 任务 | 说明 |
+|------|------|
+| Feature ID 拾取 | 射线 → GetPrimitiveFeatures → 提取 Feature ID |
+| DuckDB 查询对接 | Feature ID → HTTP 请求 → DuckDB → JSON |
+| UMG 信息面板 | 屏幕空间动态弹出建筑/地物详细信息 |
+
+#### 5.4 技术风险验证
+
+| 风险编号 | 内容 | 验证方式 |
+|---------|------|---------|
+| R1 | Cesium Tiles 本地缓存 | 付费拉取 Cesium ion tiles，测试离线可用性 |
+| R2 | HISM 植被生成速度 | 1km² 基准测试，目标：不可见弹出 |
+| R3 | 逐 Tile 贴图内存 | 实测不同分级下 GPU 内存占用 |
+| R4 | 道路贴地 | Spline Mesh vs Decal 两方案对比 |
+| R5 | 水体接缝 | 程序化水体 vs Cesium 地形边界测试 |
+
+#### 里程碑
+
+- [ ] 1km² 区域内建筑/道路/植被/水体完整生态可见
+- [ ] 点击任意建筑，UI 面板 <500ms 弹出结构化信息
+- [ ] HISM 植被无明显弹出感
+- [ ] 五项技术风险验证报告
+
+---
+
+### Phase 6：自动化管线 + 城市级扩展
+
+**目标**：将 Phase 5 成果扩展到城市级/国家级，实现海量数据自动化流转。
+
+#### 关键任务
+
+| 任务 | 说明 |
+|------|------|
+| 全自动 Python 管线 | 数据下载 → DuckDB 属性拆分 → 几何打 ID → glTF Draco/Meshopt 压缩 → 3D Tiles 索引 |
+| Niagara 植被性能优化 | 大规模漫游动态调度，LOD 距离控制 |
+| 3D Tiles 分级加载优化 | 远距离粗糙 → 近距离精细，内存预算控制 |
+| Cesium Tiles 本地化 | 全球数据完整性评估，自制工具/闭源工具补全 |
+
+#### 里程碑
+
+- [ ] 城市级（~100km²）无感漫游，帧率 >30fps
+- [ ] 管线全自动：输入区域坐标 → 输出可用 3D Tiles + GeoParquet
+- [ ] 本地 Tiles 缓存策略确定
+
+---
+
+### Phase 7：载具系统 + 动态轨迹
+
+**目标**：数字地球注入动态元素，海空陆载具漫游。
+
+#### 关键任务
+
+| 任务 | 说明 |
+|------|------|
+| GlobeAwareDefaultPawn | 椭球体重力自适应，Up Vector 贴合地表法线 |
+| UCesiumFlyToComponent | 经纬度目标点高平滑度相机调度 |
+| 地形物理碰撞 | Cesium Terrain + 载具碰撞适配 |
+| 动态轨迹模拟 | 航班航路点/交通数据 → 程序化运动轨迹 |
+
+#### 里程碑
+
+- [ ] 地面载具贴地行驶，跨经纬度重力方向正确
+- [ ] 空中飞行平滑切换视角
+- [ ] 动态交通/航班轨迹可视化
+
+---
+
+### Phase 8：高精度资产替换 + 子关卡细化
+
+**目标**：建立"程序化底座 + 手工精品"混合场景的标准工作流。
+
+#### 关键任务
+
+| 任务 | 说明 |
+|------|------|
+| LevelInstance 子关卡 | DCC（Blender/Revit）高精度模型 → UE 子关卡封装 |
+| CesiumCartographicPolygon | 多边形边界绘制 |
+| PolygonRasterOverlay 裁剪 | ExcludeSelectedTiles 剔除底层粗糙 Tiles |
+| 无缝嵌合验证 | 手工资产边界与程序化环境过渡自然 |
+
+#### 里程碑
+
+- [ ] 核心区域（如 CBD）高精度子关卡动态加载
+- [ ] 底层程序化建筑/植被在边界处完美裁剪
+- [ ] 加载/卸载无卡顿
+
+---
+
+### Phase 9：AI 视觉识别 + 数据闭环（远期）
+
+**目标**：系统具备自我感知能力，从高精度数据中逆向提取语义，形成数据闭环。
+
+#### 关键任务
+
+| 任务 | 说明 |
+|------|------|
+| 高精度数据引入 | 倾斜摄影 / 点云 / 高精度模型加载 |
+| 3D 语义分割 | CV/AI 模型识别树木、路灯、建筑轮廓、屋顶类型 |
+| 自动 GeoParquet 生成 | AI 识别结果 → 空间坐标 + 分类属性 → 写入 GeoParquet |
+| 数据反哺验证 | AI 生成的数据重新加载到系统，验证闭环完整性 |
+
+#### 里程碑
+
+- [ ] AI 模型对测试区域分类准确率 >80%
+- [ ] 自动生成的 GeoParquet 可被 Phase 5 管线正常消费
+- [ ] 数据闭环端到端演示
