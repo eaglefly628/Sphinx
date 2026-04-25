@@ -19,14 +19,15 @@
 - **每次 push 必须包含 changelog 条目**，无例外
 
 ### Agent Names (canonical)
-| Agent | Name | Domain |
-|-------|------|--------|
-| algo | 算法 | 多边形推导、地形分析、分类器、道路网络、DEM 解析 |
-| runtime | 运行时 | GISWorldBuilder 五模式、Cesium 桥接、PCG 节点、坐标转换 |
-| pipeline | 管线 | Python 预处理、数据提供者、瓦片系统、GeoJSON/Raster 解析 |
-| uds | 天气 | Ultra Dynamic Sky 集成、天气系统、云层/雾/雨雪、昼夜循环 |
+| Agent | Name | 负责人 | Domain |
+|-------|------|--------|--------|
+| lead | 主管 | 牛马老白 | 架构决策、任务分配、Code Review、版本管理 |
+| runtime | 渲染引擎 | 志轩 | GISWorldBuilder 五模式、Cesium 桥接、PCG 节点、坐标转换 |
+| uds | UDS 工程师 | 小U | Ultra Dynamic Sky 集成、天气系统、云层/雾/雨雪、昼夜循环 |
+| algo | 核心插件算法 | 小蒜 | 多边形推导、地形分析、分类器、道路网络、DEM 解析 |
+| pipeline | 架构和管线 | 翔云 | Python 预处理、数据提供者、瓦片系统、GeoJSON/Raster 解析 |
 
-使用这些精确名字（algo / runtime / pipeline / uds），不许变体。
+使用这些精确名字（lead / algo / runtime / pipeline / uds），不许变体。
 
 ## 快速参考
 
@@ -106,8 +107,11 @@ python Tools/GISPreprocess/preprocess.py --input ./RawData --output ./Output \
 - 新文件遵循现有目录结构: Public/Data/, Public/Polygon/, Public/Runtime/, Public/PCG/
 - Python 预处理输出 WGS84 GeoJSON，投影由 UE 侧处理
 
+- AngelScript 文件放在 `Script/` 目录，写 AS 前必读 `docs/AngelScript_Guide.md`
+
 ## Design Principles
 
+- **AngelScript 优先**：引擎已集成 AngelScript，新功能优先用 AngelScript（不编译）实现；仅在 AngelScript 无法满足性能/底层需求时才用 C++。现有 C++ 模块保持不变，新增游戏逻辑/编辑器工具/蓝图替代层用 AngelScript
 - 接口优先：新数据源实现 IGISDataProvider，不改上层代码
 - 零 GDAL 运行时：UE5 插件永远不依赖 GDAL，所有栅格处理在 Python 预处理完成
 - 软依赖：WITH_CESIUM 条件编译，不装 Cesium 不影响任何现有功能
@@ -153,7 +157,18 @@ agents/
 
 Phase 0-4 全部完成 ✅
 
-待讨论/实现:
+### 已入库插件
+- **CesiumForUnreal**: 3D 地球渲染，WITH_CESIUM 软依赖
+- **UltraDynamicSky**: 天空/天气/昼夜，纯 Blueprint 插件，WITH_UDS 软依赖
+- **GISProcedural**: 自研 GIS 程序化生成（21 个 .h + 21 个 .cpp）
+
+### 项目构建
+- 引擎：AngelScript 定制版 UE5（源码编译）
+- 项目 Target：`Source/eaglewalk.Target.cs` + `Source/eaglewalkEditor.Target.cs`
+- 生成工程文件：运行项目根目录 `GenerateProjectFiles.bat`（需设 `UE_ENGINE_DIR` 环境变量）
+
+### 待实现（Phase 5）
 - 立交桥/涵洞 PCG 生成（需 bridge/tunnel 标签提取 + LayerIndex 分离）
 - 道路 Spline Mesh 生成
 - 水体 Mesh 生成
+- UDS 天气系统集成（WeatherBridgeComponent，AngelScript 优先）

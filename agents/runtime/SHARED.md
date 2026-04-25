@@ -29,9 +29,11 @@ EPCGDetailLevel GetDetailLevelForDistance(float DistanceM) const;
 - 水体 Mesh 生成（需要 waterway polygon 数据）
 - 与 uds 天气系统集成（天气影响 PCG 密度？雾/雨效果联动？）
 
-## TODO (from lead review / peer review)
+## TODO (from lead review)
 
-（暂无）
+- [ ] **P2: 道路 Spline Mesh 生成** (from lead) — 消费 algo 的 `TArray<FRoadSegment>`（顶点序列 + LayerIndex + 宽度）→ USplineMeshComponent。立交桥 Z 偏移，涵洞标记。依赖 algo 完成 EStructureLayer + 逐顶点高程
+- [ ] **P2: 水体 Mesh 生成** (from lead) — waterway polygon → 平面 mesh + 水材质。数据来自 pipeline 的 GeoJsonParser
+- [ ] **P3: 与 uds 天气联动** (from lead) — 读取 uds 的 WeatherBridge 天气状态，天气影响 PCG LOD 距离（雾天缩短）。依赖 uds 完成 WeatherBridge.as
 
 ## Changelog
 

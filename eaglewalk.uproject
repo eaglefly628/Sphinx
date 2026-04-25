@@ -3,7 +3,7 @@
 	"Version": 1,
 	"VersionName": "0.1.0",
 	"FriendlyName": "EagleWalk",
-	"EngineAssociation": "",
+	"EngineAssociation": "{A0C5831C-42CB-FC8F-A9B2-9B900444D194}",
 	"Category": "Geospatial",
 	"Description": "GIS-driven procedural military simulation with Cesium, UltraDynamicSky, and GISProcedural.",
 	"CreatedBy": "EagleFly Team",
@@ -21,6 +21,10 @@
 		},
 		{
 			"Name": "GISProcedural",
+			"Enabled": true
+		},
+		{
+			"Name": "PCG",
 			"Enabled": true
 		}
 	]

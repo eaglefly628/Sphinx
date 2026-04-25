@@ -3,6 +3,7 @@
 #include "GISProceduralModule.h"
 #include "Data/GeoJsonParser.h"
 #include "HttpModule.h"
+#include "Http.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
 #include "HAL/Event.h"
@@ -96,8 +97,8 @@ FString UArcGISRestProvider::BuildQueryUrl(
     FString Url = FString::Printf(
         TEXT("%s/query?where=%s&outFields=%s&f=geojson&resultRecordCount=%d"),
         *LayerUrl,
-        *FGenericPlatformHttp::UrlEncode(WhereClause),
-        *FGenericPlatformHttp::UrlEncode(OutFields),
+        *FPlatformHttp::UrlEncode(WhereClause),
+        *FPlatformHttp::UrlEncode(OutFields),
         MaxRecordCount
     );
 
