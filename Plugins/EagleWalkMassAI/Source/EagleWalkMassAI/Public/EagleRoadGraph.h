@@ -6,7 +6,8 @@
 
 /**
  * A directed reference to one end of an edge.
- * EdgeIdx + bAtStart fully identifies "which junction" the vehicle is heading into.
+ * EdgeIdx + bAtStart fully identifies "which junction" the vehicle is heading
+ * into. Indices are stable across edits when backed by a sparse store.
  */
 USTRUCT(BlueprintType)
 struct EAGLEWALKMASSAI_API FEagleEdgeEndpoint
@@ -23,14 +24,13 @@ struct EAGLEWALKMASSAI_API FEagleEdgeEndpoint
 /**
  * Abstract pluggable road graph.
  *
- * Implement this to feed AEagleTrafficManager from any road source:
- *  - bag of USplineComponents (USplineRoadGraph, default impl)
- *  - GIS road network (write a subclass that wraps your data)
- *  - hand-authored arrays
+ * Designed for streamed worlds: edges can appear and disappear at runtime as
+ * 3D tiles or vector tiles load/unload. Indices returned from add operations
+ * MUST stay stable for the lifetime of the edge (use a sparse store), so that
+ * agents can keep referring to them. Removed edges return invalid from
+ * IsValidEdge() and the traffic manager will despawn affected agents.
  *
- * Coordinates are world-space cm. Edge indices are stable until the graph is
- * rebuilt; prefer rebuilding the whole graph on streaming events rather than
- * incremental edits in v0.
+ * Coordinates are world-space cm.
  */
 UCLASS(Abstract, BlueprintType, Blueprintable)
 class EAGLEWALKMASSAI_API UEagleRoadGraph : public UObject
@@ -38,10 +38,13 @@ class EAGLEWALKMASSAI_API UEagleRoadGraph : public UObject
 	GENERATED_BODY()
 
 public:
-	/** Total edges currently in the graph. */
+	/** Total live edges. */
 	virtual int32 GetEdgeCount() const { return 0; }
 
-	/** Length of an edge in cm. Returns 0 for invalid index. */
+	/** False if the edge has been removed or never existed. */
+	virtual bool IsValidEdge(int32 EdgeIdx) const { return false; }
+
+	/** Length of an edge in cm. 0 if invalid. */
 	virtual float GetEdgeLength(int32 EdgeIdx) const { return 0.f; }
 
 	/**
@@ -55,20 +58,20 @@ public:
 
 	/**
 	 * Edges connected at the given endpoint of EdgeIdx, excluding the edge
-	 * itself. Each result includes a bAtStart flag indicating which end of the
-	 * neighbor is at the junction (so the caller knows which way to traverse).
+	 * itself. bAtStart in the returned endpoints describes which end of the
+	 * neighbor sits at the junction (so caller knows which way to traverse).
 	 */
 	virtual TArray<FEagleEdgeEndpoint> GetConnectedEdges(int32 EdgeIdx, bool bAtStart) const { return {}; }
 
-	/** Pick any edge index uniformly at random, or INDEX_NONE if empty. */
+	/** Pick any valid edge index uniformly at random, or INDEX_NONE if empty. */
 	virtual int32 GetRandomEdge(FRandomStream& Rng) const { return INDEX_NONE; }
 
 	/**
-	 * Edges whose AABB overlaps Bounds. Used by spawning/despawning.
-	 * Default impl is O(N) brute force; override for spatial index.
+	 * Edges whose AABB overlaps Bounds. Default impl is O(N); override for
+	 * spatial index if needed.
 	 */
 	virtual TArray<int32> GetEdgesInBounds(const FBox& Bounds) const { return {}; }
 
-	/** World-space AABB of an edge (cheap, used by GetEdgesInBounds default). */
+	/** World-space AABB of an edge. */
 	virtual FBox GetEdgeBounds(int32 EdgeIdx) const { return FBox(ForceInit); }
 };

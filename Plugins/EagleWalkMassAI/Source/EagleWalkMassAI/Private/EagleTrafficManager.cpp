@@ -78,7 +78,21 @@ void AEagleTrafficManager::Tick(float DeltaTime)
 	// Step + cull pass. Iterate backwards so RemoveAgentAt doesn't disturb indexing.
 	for (int32 i = Agents.Num() - 1; i >= 0; --i)
 	{
+		// Edge may have been removed by tile unload between ticks.
+		if (!RoadGraph->IsValidEdge(Agents[i].EdgeIdx))
+		{
+			RemoveAgentAt(i);
+			continue;
+		}
+
 		StepAgent(Agents[i], DeltaTime);
+
+		// StepAgent may have hopped to a (now invalid) neighbor edge; check again.
+		if (!RoadGraph->IsValidEdge(Agents[i].EdgeIdx))
+		{
+			RemoveAgentAt(i);
+			continue;
+		}
 
 		FVector Pos, Tan;
 		RoadGraph->SampleEdge(Agents[i].EdgeIdx, Agents[i].DistanceAlongEdge, Pos, Tan);
