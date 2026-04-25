@@ -24,6 +24,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "EagleWalkMassAI",
+			"Enabled": true
+		},
+		{
 			"Name": "PCG",
 			"Enabled": true
 		}

@@ -1,0 +1,25 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1.0",
+	"FriendlyName": "EagleWalk MassAI",
+	"Description": "Lightweight HISM-based traffic/agent system for streamed road networks. No Mass/ZoneGraph dependency. Pluggable road provider.",
+	"Category": "AI",
+	"CreatedBy": "EagleFly Team",
+	"CreatedByURL": "",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"EnabledByDefault": true,
+	"CanContainContent": false,
+	"IsBetaVersion": true,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "EagleWalkMassAI",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	]
+}
