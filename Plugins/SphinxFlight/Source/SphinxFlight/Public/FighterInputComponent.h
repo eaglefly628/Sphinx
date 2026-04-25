@@ -52,6 +52,28 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input")
 	TObjectPtr<UInputAction> IA_Brake;
 
+	// --- Weapons (mirrors legacy "shoot_bullet" / "shoot_rocket") ---
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input|Weapons")
+	TObjectPtr<UInputAction> IA_FireGun;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input|Weapons")
+	TObjectPtr<UInputAction> IA_FireMissile;
+
+	// --- Camera / Look (mirrors legacy "look" / "LookUp" / "Turn") ---
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input|Camera")
+	TObjectPtr<UInputAction> IA_LookMode;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Input|Camera")
+	TObjectPtr<UInputAction> IA_LookAxis;
+
+	UPROPERTY(BlueprintReadOnly, Category="Input|Camera")
+	bool bLookModeActive = false;
+
+	UPROPERTY(BlueprintReadOnly, Category="Input|Camera")
+	FVector2D LookAxisDelta = FVector2D::ZeroVector;
+
 private:
 	void SetupInputBindings();
 
@@ -64,6 +86,12 @@ private:
 	void OnToggleAutopilot(const FInputActionValue& Value);
 	void OnFlaps(const FInputActionValue& Value);
 	void OnBrake(const FInputActionValue& Value);
+	void OnFireGun(const FInputActionValue& Value);
+	void OnFireGunReleased(const FInputActionValue& Value);
+	void OnFireMissile(const FInputActionValue& Value);
+	void OnLookModePressed(const FInputActionValue& Value);
+	void OnLookModeReleased(const FInputActionValue& Value);
+	void OnLookAxis(const FInputActionValue& Value);
 
 	UPROPERTY()
 	TObjectPtr<UFighterAerodynamicsComponent> AeroComp;

@@ -50,6 +50,19 @@ void UFighterInputComponent::SetupInputBindings()
 	if (IA_Flaps)             EIC->BindAction(IA_Flaps, ETriggerEvent::Triggered, this, &UFighterInputComponent::OnFlaps);
 	if (IA_Brake)             EIC->BindAction(IA_Brake, ETriggerEvent::Triggered, this, &UFighterInputComponent::OnBrake);
 
+	if (IA_FireGun)
+	{
+		EIC->BindAction(IA_FireGun, ETriggerEvent::Started, this, &UFighterInputComponent::OnFireGun);
+		EIC->BindAction(IA_FireGun, ETriggerEvent::Completed, this, &UFighterInputComponent::OnFireGunReleased);
+	}
+	if (IA_FireMissile)       EIC->BindAction(IA_FireMissile, ETriggerEvent::Started, this, &UFighterInputComponent::OnFireMissile);
+	if (IA_LookMode)
+	{
+		EIC->BindAction(IA_LookMode, ETriggerEvent::Started, this, &UFighterInputComponent::OnLookModePressed);
+		EIC->BindAction(IA_LookMode, ETriggerEvent::Completed, this, &UFighterInputComponent::OnLookModeReleased);
+	}
+	if (IA_LookAxis)          EIC->BindAction(IA_LookAxis, ETriggerEvent::Triggered, this, &UFighterInputComponent::OnLookAxis);
+
 	UE_LOG(LogSphinxFlight, Log, TEXT("Flight input bindings set up"));
 }
 
@@ -109,4 +122,40 @@ void UFighterInputComponent::OnBrake(const FInputActionValue& Value)
 {
 	if (!AeroComp) return;
 	AeroComp->bBrakeEngaged = Value.Get<float>() > 0.5f;
+}
+
+// --- Weapons (stubs — will route to UWeaponComponent in next pass) ---
+
+void UFighterInputComponent::OnFireGun(const FInputActionValue& Value)
+{
+	UE_LOG(LogSphinxFlight, Log, TEXT("Gun: FIRE START"));
+}
+
+void UFighterInputComponent::OnFireGunReleased(const FInputActionValue& Value)
+{
+	UE_LOG(LogSphinxFlight, Log, TEXT("Gun: FIRE STOP"));
+}
+
+void UFighterInputComponent::OnFireMissile(const FInputActionValue& Value)
+{
+	UE_LOG(LogSphinxFlight, Log, TEXT("Missile: LAUNCH"));
+}
+
+// --- Camera / Look ---
+
+void UFighterInputComponent::OnLookModePressed(const FInputActionValue& Value)
+{
+	bLookModeActive = true;
+}
+
+void UFighterInputComponent::OnLookModeReleased(const FInputActionValue& Value)
+{
+	bLookModeActive = false;
+	LookAxisDelta = FVector2D::ZeroVector;
+}
+
+void UFighterInputComponent::OnLookAxis(const FInputActionValue& Value)
+{
+	if (!bLookModeActive) return;
+	LookAxisDelta = Value.Get<FVector2D>();
 }
