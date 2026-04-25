@@ -14,3 +14,13 @@ Plugins/CesiumForUnreal/Source/ThirdParty/lib/**/*.lib filter=lfs diff=lfs merge
 Plugins/CesiumForUnreal/Source/ThirdParty/lib/**/*.a filter=lfs diff=lfs merge=lfs -text
 Plugins/CesiumForUnreal/Content/**/*.uasset filter=lfs diff=lfs merge=lfs -text
 Plugins/CesiumForUnreal/Content/**/*.umap filter=lfs diff=lfs merge=lfs -text
+
+# SphinxFlight assets (aircraft mesh, missiles, HUD, demo maps)
+Content/SphinxFlight/**/*.uasset filter=lfs diff=lfs merge=lfs -text
+Content/SphinxFlight/**/*.umap filter=lfs diff=lfs merge=lfs -text
+Content/SphinxFlight/**/*.png filter=lfs diff=lfs merge=lfs -text
+Content/SphinxFlight/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+Content/SphinxFlight/**/*.tga filter=lfs diff=lfs merge=lfs -text
+Content/SphinxFlight/**/*.exr filter=lfs diff=lfs merge=lfs -text
+Content/SphinxFlight/**/*.fbx filter=lfs diff=lfs merge=lfs -text
+Content/SphinxFlight/**/*.wav filter=lfs diff=lfs merge=lfs -text
