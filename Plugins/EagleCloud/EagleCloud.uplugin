@@ -1,0 +1,19 @@
+{
+    "FileVersion": 3,
+    "Version": 1,
+    "VersionName": "0.1.0",
+    "FriendlyName": "EagleCloud - Satellite Cloud Bridge",
+    "Description": "Feeds satellite cloud cover textures into Ultra Dynamic Sky volumetric/2D clouds. Single equirectangular texture drives ground-layer volumetric clouds, mid-altitude 2D layer, and Earth-mesh overlay for seamless near-far cloud rendering.",
+    "Category": "Weather",
+    "CreatedBy": "MilSim Team",
+    "EnabledByDefault": true,
+    "CanContainContent": true,
+    "IsBetaVersion": true,
+    "Modules": [
+        {
+            "Name": "EagleCloud",
+            "Type": "Runtime",
+            "LoadingPhase": "Default"
+        }
+    ]
+}
