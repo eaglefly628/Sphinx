@@ -99,11 +99,18 @@ public:
     UFUNCTION(BlueprintCallable, CallInEditor, Category = "EagleCloud")
     bool ApplyToUDS();
 
+    /**
+     * Sync PaintedOpacity / AffectsGlobalValues to UDS without redrawing the RT.
+     * Called by AAtmosphereCloudManager each tick so LOD changes propagate immediately.
+     */
+    UFUNCTION(BlueprintCallable, Category = "EagleCloud")
+    void SyncPropertiesToUDS();
+
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaSeconds) override;
 
 private:
-    UPROPERTY(Transient) TObjectPtr<AActor> CachedUDS = nullptr;
+    UPROPERTY(Transient) TWeakObjectPtr<AActor> CachedUDS;
     float TimeSinceRefresh = 0.f;
 
     AActor* FindUDSActor() const;

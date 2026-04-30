@@ -138,19 +138,19 @@ bool ASatelliteCloudFeeder::ApplyToUDS()
         return false;
     }
 
-    if (!CachedUDS)
+    if (!CachedUDS.IsValid())
     {
         CachedUDS = FindUDSActor();
     }
-    if (!CachedUDS)
+    if (!CachedUDS.IsValid())
     {
         UE_LOG(LogEagleCloud, Warning, TEXT("ApplyToUDS: Ultra_Dynamic_Sky actor not found in level"));
         return false;
     }
 
-    EnableUDSPainting(CachedUDS);
+    EnableUDSPainting(CachedUDS.Get());
 
-    UTextureRenderTarget2D* RT = GetUDSCloudRT(CachedUDS);
+    UTextureRenderTarget2D* RT = GetUDSCloudRT(CachedUDS.Get());
     if (!RT)
     {
         UE_LOG(LogEagleCloud, Warning,
@@ -166,13 +166,25 @@ bool ASatelliteCloudFeeder::ApplyToUDS()
         const FVector2D WorldXY = GetSampleCenterWorldXY();
 
         // Move UDS painted RT window to follow camera
-        SetUDSTargetLocation(CachedUDS, WorldXY);
+        SetUDSTargetLocation(CachedUDS.Get(), WorldXY);
 
         return DrawGlobalRegionToRT(RT, LatLon.X, LatLon.Y);
     }
     else
     {
         return DrawLocalTextureToRT(RT);
+    }
+}
+
+void ASatelliteCloudFeeder::SyncPropertiesToUDS()
+{
+    if (!CachedUDS.IsValid())
+    {
+        CachedUDS = FindUDSActor();
+    }
+    if (CachedUDS.IsValid())
+    {
+        EnableUDSPainting(CachedUDS.Get());
     }
 }
 

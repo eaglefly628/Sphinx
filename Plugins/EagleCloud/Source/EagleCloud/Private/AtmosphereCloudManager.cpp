@@ -70,8 +70,9 @@ void AAtmosphereCloudManager::ApplyBlend(float MacroAlpha, float UDSDensity, dou
     if (Feeder)
     {
         Feeder->AffectsGlobalValues = UDSDensity;
-        // Push the new value to UDS by reapplying (cheap — just sets the float prop)
-        Feeder->ApplyToUDS();
+        // Sync only float props to UDS — does NOT redraw the RT.
+        // The RT blit is controlled by Feeder's own RefreshIntervalSeconds timer.
+        Feeder->SyncPropertiesToUDS();
     }
 
     // 2. Toggle macro shell visibility. Below low altitude, hide entirely to
