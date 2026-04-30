@@ -74,6 +74,33 @@ UDS 插件已入库（Git LFS），API 分析完成。集成代码待创建。
 
 ## Changelog
 
+### [v1.1.0] — uds — EagleCloud 全球卫星云图 + 调试菜单修复
+**已完成**:
+- `Plugins/EagleCloud/` 新插件 (C++, 非 AngelScript — 因性能需求)
+  - `ASatelliteCloudFeeder`: Phase A (local 200km RT 绘制) + Phase B (全球等经纬度纹理 UV 采样 + camera 跟随)
+  - `AAtmosphereCloudManager`: 高度 LOD 混合 (smoothstep), Feeder.AffectsGlobalValues + MPC 驱动
+  - `Tools/Weather/fetch_gibs_cloud.py`: NASA GIBS WMS 全球云图下载
+  - `Tools/Weather/gen_cloud_test.py`: Phase A 测试 PNG 生成器
+  - `Plugins/EagleCloud/README.md`: Phase A/B/C 完整安装说明
+- `WeatherDebugMenu` 全部修复:
+  - Cloud/Fog → UDW Actor (不是 UDS)，值 ×10 (UDW 0–10 刻度)
+  - Thunder FName 修正: `Thunder/Lightning` (无空格)
+  - Manual Override 标志补充
+  - ComboBox ForegroundColor = White (修复黑字不可读)
+  - 7个值标签实时更新
+  - DumpActorProperties debug 代码已删除
+
+**待编辑器完成 (无法从 CLI 创建 .uasset)**:
+- `MPC_AtmosphereCloud` — 3 个标量参数 (MacroAlpha/UDSDensity/AltitudeKm)
+- `M_AtmosphereShell` — 球形壳半透明材质，读 GlobalCloudTexture
+- 关卡中的大气球体 Mesh Actor
+
+**代码层 TODO**:
+- [ ] `AtmosphereCloudManager` 在 HighAltitudeKm 以上切换 UDS `Sky Mode` 为 Space (目前只 fade AffectsGlobalValues，未真正关闭 Volumetric)
+- [ ] `SatelliteCloudFeeder::GetSampleCenterLatLon()` 升级为 Cesium georef (当前 flat-earth 近似，200km 窗口内误差 <1%)
+- [ ] 经度换行 (±180°) 时双 Draw Call 精确裁切 (当前靠 Wrap 纹理模式，视觉上 OK)
+- [ ] WeatherBridge.as P1: Cesium 经纬度→UDS Latitude/Longitude/TimeZone 同步 (原 SHARED 遗留)
+
 ### [v1.0.0] — uds
 - 初始状态记录，UDS 插件 API 完整分析
 - 确定集成方案：软依赖 + 反射/AngelScript 桥接
