@@ -107,9 +107,28 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|Fallback", meta = (ClampMin = "0", ClampMax = "1"))
     float NoDataThreshold = 0.05f;
 
+    // ---------- Diagnostics ----------
+
+    /**
+     * When true, each ApplyToUDS tick prints a step-by-step trace of what happened
+     * (UDS found, prop writes succeeded, RT obtained, draw OK). Use to bisect
+     * silent reflection failures. Disable in shipping for log noise.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|Debug")
+    bool bVerboseLogging = true;
+
     /** Push the right texture into UDS now. Returns true on success. */
     UFUNCTION(BlueprintCallable, CallInEditor, Category = "EagleCloud")
     bool ApplyToUDS();
+
+    /**
+     * Dump the actual current values + reflection types of every UDS property
+     * we touch. Use this to verify property names match between UDS 9.3A and
+     * our reflection strings (e.g. confirm "Cloud Painting Active" exists as
+     * a FBoolProperty rather than missing or hidden under a different name).
+     */
+    UFUNCTION(BlueprintCallable, CallInEditor, Category = "EagleCloud|Debug")
+    void DumpUDSState();
 
     /**
      * Sync PaintedOpacity / AffectsGlobalValues to UDS without redrawing the RT.
