@@ -188,6 +188,28 @@ def encode_png_rgba(w: int, h: int, rgba: bytearray) -> bytes:
             + _png_chunk(b"IEND", b""))
 
 
+def encode_png_gray(w: int, h: int, gray: bytearray) -> bytes:
+    ihdr = struct.pack(">IIBBBBB", w, h, 8, 0, 0, 0, 0)
+    raw = bytearray()
+    for y in range(h):
+        raw.append(0)
+        raw.extend(gray[y*w:(y+1)*w])
+    return (b"\x89PNG\r\n\x1a\n"
+            + _png_chunk(b"IHDR", ihdr)
+            + _png_chunk(b"IDAT", zlib.compress(bytes(raw), level=6))
+            + _png_chunk(b"IEND", b""))
+
+
+def make_cloud_mask(rgba: bytearray) -> bytearray:
+    """min(R,G,B) per pixel → grayscale cloud density (white=cloud, black=clear/land/ocean)."""
+    n = len(rgba) // 4
+    gray = bytearray(n)
+    for i in range(n):
+        b = i * 4
+        gray[i] = min(rgba[b], rgba[b+1], rgba[b+2])
+    return gray
+
+
 # ---------------------------------------------------------------------------
 # Multi-day max composite
 # ---------------------------------------------------------------------------
@@ -230,12 +252,13 @@ def main() -> int:
     parser.add_argument("--layer", choices=list(LAYERS.keys()), default="TerraTrueColor")
     parser.add_argument("--date",  default=None,
                         help="Most recent date YYYY-MM-DD (UTC). Default: auto-detect.")
-    parser.add_argument("--days",  type=int, default=1,
-                        help="Number of days to composite (default 1). "
-                             "Use 3 to fill orbital gaps.")
+    parser.add_argument("--days",  type=int, default=3,
+                        help="Number of days to composite (default 3, fills orbital gaps).")
     parser.add_argument("--width",  type=int, default=4096)
     parser.add_argument("--height", type=int, default=2048)
     parser.add_argument("--output", default=None)
+    parser.add_argument("--no-mask", action="store_true",
+                        help="Skip automatic cloud mask generation.")
     args = parser.parse_args()
 
     layer_id = LAYERS[args.layer]
@@ -253,6 +276,7 @@ def main() -> int:
             os.path.dirname(__file__), "output",
             f"CloudGlobal_{args.layer}_{args.date}{suffix}.png",
         )
+    mask_path = os.path.splitext(args.output)[0] + "_CloudMask.png"
 
     print(f"Layer:  {args.layer} ({layer_id})")
     print(f"Dates:  {', '.join(d.isoformat() for d in dates)}")
@@ -260,17 +284,20 @@ def main() -> int:
     print(f"Output: {args.output}")
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
 
+    # Fetch — always resolve to (w, h, rgba) so mask generation is unified
     if args.days == 1:
         url = build_url(layer_id, args.width, args.height, args.date)
-        print(f"Fetching {args.date}...")
+        print(f"Fetching {args.date}...", end=" ", flush=True)
         try:
             raw = fetch_bytes(url)
         except Exception as e:
-            print(f"ERROR: {e}", file=sys.stderr)
+            print(f"\nERROR: {e}", file=sys.stderr)
             return 1
+        w, h, rgba = decode_png(raw)
+        out_bytes = encode_png_rgba(w, h, rgba)
         with open(args.output, "wb") as f:
-            f.write(raw)
-        print(f"Wrote {args.output} ({len(raw)/1024/1024:.1f} MB)")
+            f.write(out_bytes)
+        print(f"OK ({len(out_bytes)/1024/1024:.1f} MB)")
     else:
         frames = []
         for d in dates:
@@ -291,14 +318,25 @@ def main() -> int:
             return 1
 
         print(f"Compositing {len(frames)} frames (max pixel)...")
-        w, h, merged = composite_max(frames)
-        out_bytes = encode_png_rgba(w, h, merged)
+        w, h, rgba = composite_max(frames)
+        out_bytes = encode_png_rgba(w, h, rgba)
         with open(args.output, "wb") as f:
             f.write(out_bytes)
         print(f"Wrote {args.output} ({len(out_bytes)/1024/1024:.1f} MB)")
 
-    print()
-    print("Next step: run extract_cloud_mask.py to generate the grayscale cloud density mask.")
+    # Cloud mask — generated from the already-decoded RGBA, no extra fetch
+    if not args.no_mask:
+        print("Extracting cloud mask (min-channel)...", end=" ", flush=True)
+        gray = make_cloud_mask(rgba)
+        mask_bytes = encode_png_gray(w, h, gray)
+        with open(mask_path, "wb") as f:
+            f.write(mask_bytes)
+        print(f"OK ({len(mask_bytes)/1024/1024:.1f} MB)")
+        print(f"  TrueColor → {args.output}")
+        print(f"  CloudMask → {mask_path}")
+
+    print("\nUE import settings for CloudMask:")
+    print("  Compression: Grayscale  |  sRGB: OFF  |  X: Wrap  |  Y: Clamp  |  Mips: ON")
     return 0
 
 
