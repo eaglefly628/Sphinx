@@ -195,6 +195,18 @@ def make_cloud_mask(rgba):
     return gray
 
 
+def clear_polar_bands(rgba, w, h, max_lat_deg=60.0):
+    """Zero out rows outside ±max_lat_deg (no-data garbage from WMS fill)."""
+    # equirectangular: row 0 = 90°N, row h-1 = 90°S
+    # row_cut_n = rows where lat > max_lat_deg (top of image)
+    row_n = int(h * (90.0 - max_lat_deg) / 180.0)   # first valid row from top
+    row_s = int(h * (90.0 + max_lat_deg) / 180.0)   # last valid row from top
+    for y in list(range(0, row_n)) + list(range(row_s, h)):
+        base = y * w * 4
+        for x in range(w):
+            rgba[base+x*4] = rgba[base+x*4+1] = rgba[base+x*4+2] = rgba[base+x*4+3] = 0
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -210,6 +222,9 @@ def main():
     parser.add_argument("--height",  type=int, default=2048)
     parser.add_argument("--output",  default=None)
     parser.add_argument("--blur-radius", type=int, default=2)
+    parser.add_argument("--polar-lat",   type=float, default=60.0,
+                        help="Zero out pixels above/below this latitude (default 60). "
+                             "nowCOAST data ends at ±60°; set to 90 to keep polar fill.")
     parser.add_argument("--no-mask", action="store_true")
     args = parser.parse_args()
 
@@ -239,6 +254,10 @@ def main():
     print(f"OK ({kb/1024:.1f}MB)" if kb >= 1024 else f"OK ({kb}KB)")
 
     w, h, rgba = decode_png(raw)
+
+    if args.polar_lat < 90.0:
+        print(f"Clear polar bands (|lat| > {args.polar_lat}°)...", end=" ", flush=True)
+        clear_polar_bands(rgba, w, h, args.polar_lat); print("done")
 
     if args.blur_radius > 0:
         print(f"Blur r={args.blur_radius}...", end=" ", flush=True)
