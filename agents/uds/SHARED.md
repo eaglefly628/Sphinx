@@ -74,6 +74,84 @@ UDS 插件已入库（Git LFS），API 分析完成。集成代码待创建。
 
 ## Changelog
 
+### [v1.2.0] — uds — 全球云图数据管线完成，下一步 UE5 编辑器接入
+
+#### 数据管线状态：完成 ✅
+
+**`Tools/Weather/fetch_gibs_cloud.py`** 最终方案：
+- 数据源：NOAA nowCOAST WMS `global_longwave_imagery_mosaic`
+- 卫星：GOES-18/19 + Himawari-9 + Meteosat-9/10，全球缝合，无拼接缝隙
+- 波段：长波红外 12µm，冷云顶=亮，日夜全覆盖，无夜侧黑区
+- 覆盖：60°S~60°N，极区 (`clear_polar_bands`) 置零
+- 输出：`CloudGlobal_GEO_<timestamp>.png` + `*_CloudMask.png`
+- 单次 HTTP 请求即可，stdlib only，无需认证
+
+**C++ 插件 EagleCloud 状态**：
+- `ASatelliteCloudFeeder`：Global mode 完整，UV 等经纬度→UDS RT，camera 跟随
+- `AAtmosphereCloudManager`：高度 LOD smoothstep，MPC 写入 MacroAlpha/UDSDensity/AltitudeKm/NoDataThreshold
+- `SatelliteCloudFeeder.NoDataThreshold = 0.05`：无数据区平滑过渡到程序化噪声（Shader 端待实现）
+
+#### 架构确认（下一 Session 实现目标）
+
+完整架构（经用户确认）：
+
+```
+NASA PNG（等经纬度灰度）
+  ├─► 宏观层 Macro Shell（大气球壳 Mesh）
+  │     Material: Translucent Unlit，UV=球极→等经纬度
+  │     Alpha = MPC.MacroAlpha（高度驱动，太空时=1，地面时=0）
+  │     Fresnel 边缘柔化 + 伪3D受光（NASA图当Heightmap算Normal）
+  │     风速 UV Panner = MPC.CloudScrollSpeed（与UDS同步）
+  │
+  └─► 微观层 UDS Volumetric Clouds
+        SatelliteCloudFeeder 将全球纹理局部 UV 采样注入 UDS RT
+        UV 映射：U = U_origin + WorldX/PlanetCircumference
+                V = V_origin + WorldY/PlanetCircumference
+        Density = MPC.UDSDensity（高度驱动，地面时=1，太空时=0）
+
+控制中枢 AAtmosphereCloudManager (Tick):
+  Altitude = (CamZ - GroundZ) * 0.00001 km
+  T = smoothstep((Alt - LowKm) / (HighKm - LowKm))
+  MacroAlpha = T
+  UDSDensity = 1 - T
+  → MPC 驱动两套系统
+```
+
+#### 下一 Session 必做清单（编辑器操作）
+
+**P0：导入云图 PNG（必须先做）**
+- Import `CloudGlobal_GEO_*.png` as UTexture2D
+- 设置：sRGB=OFF，Compression=Masks(no sRGB)，MipMaps=ON
+- Tiling：X=Wrap（经度循环），Y=Clamp（纬度不循环）
+- 将此 Texture 赋给 `SatelliteCloudFeeder.GlobalCloudTexture`
+
+**P0：创建 MPC_AtmosphereCloud**
+- 4 个标量参数：`MacroAlpha`、`UDSDensity`、`AltitudeKm`、`NoDataThreshold`
+- 赋给关卡中的 `AAtmosphereCloudManager.MPC`
+
+**P1：创建 M_AtmosphereShell 材质**
+- Blend Mode: Translucent，Lighting Model: Unlit
+- UV = atan2(N.y, N.x)/2π + 0.5（经度），acos(N.z)/π（纬度）→ 等经纬度采样
+- Cloud Density = Texture Sample（CloudMask）×  MPC.MacroAlpha
+- Opacity = Cloud Density（带 Fresnel 边缘柔化）
+- 无数据兜底：`lerp(NASADensity, ProceduralNoise×0.5, 1-smoothstep(0, NoDataThreshold, NASADensity))`
+- 伪3D受光：NASA灰度图当Heightmap → ddx/ddy 算法线 → dot(Normal, SunDir) 简单漫反射
+
+**P1：关卡布置**
+- 放一个大球体 Mesh（半径=大气层高度，约地球半径×1.05）
+- 赋 M_AtmosphereShell 材质
+- 引用给 `AAtmosphereCloudManager.MacroShellActor`
+
+**P2：踩坑提示**
+- Z-Fighting：M_AtmosphereShell 开 Disable Depth Test 或调 Translucency Sort Priority（壳体 < 体积云）
+- UDS Texture Address Mode：确保 UDS Coverage RT 采样不 Tile（设为 Clamp 或用 UV frac 保护）
+- 对齐验证：先关 UV Scroll，垂直降落检查 2D 壳边界与体积云边界是否重合
+
+**P3：代码层 TODO（下 Session 继续）**
+- `AtmosphereCloudManager`：HighAltitudeKm 以上切 UDS Sky Mode = Space（真正关掉 Volumetric 节省 GPU）
+- `SatelliteCloudFeeder::GetSampleCenterLatLon()`：升级为 Cesium georef（当前 flat-earth 近似）
+- WeatherBridge.as P1：Cesium 经纬度 → UDS Latitude/Longitude/TimeZone 同步
+
 ### [v1.1.0] — uds — EagleCloud 全球卫星云图 + 调试菜单修复
 **已完成**:
 - `Plugins/EagleCloud/` 新插件 (C++, 非 AngelScript — 因性能需求)
