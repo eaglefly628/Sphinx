@@ -1,29 +1,34 @@
 #!/usr/bin/env python3
 """
-Fetch global cloud cover from NASA GIBS MODIS Terra + Aqua Infrared (Band 31).
+Fetch global merged geostationary IR cloud cover from NOAA nowCOAST WMS.
 
-Uses THERMAL INFRARED (10.78–11.28 µm), not visible light:
-  - Day AND Night coverage — no half-globe black area.
-  - Cold cloud tops (200–240 K) → bright in IR display → high cloud density.
-  - Warm ocean/land surface (280–310 K) → dark in IR display → low density.
+Data source: NOAA GMGSI (Global Mosaic of Geostationary Satellite Imagery)
+  - Satellites: GOES-18 (East), GOES-19 (West), Himawari-9, Meteosat-9, Meteosat-10
+  - Band: Longwave IR (~12 µm) — cloud tops are cold → bright pixel → high density
+  - Coverage: 60°S to 60°N global, seamless, no swath gaps
+  - Update: hourly, ~3 km resolution, no authentication required
 
-3-day priority composite (Terra + Aqua × 3 days = 6 frames):
-  - Newest frame has highest priority.
-  - Older frames fill only the pure-black swath gaps from newer frames.
+Day AND Night: thermal IR does not depend on sunlight. No half-globe blackout.
 
-Cloud mask: brightness / 255  (IR: cold cloud tops = bright)
-  - High cloud → cold → bright pixel → high density  ✓
-  - Clear surface → warm → dark pixel → low density  ✓
+Cloud mask: brightness/255
+  - Cold high cloud (200–240 K) → bright white pixel → density ≈ 1
+  - Warm surface / clear sky (280–310 K) → dark pixel → density ≈ 0
+
+Channels available (--channel flag):
+  lw   Longwave IR 12 µm   (best for cloud detection, default)
+  sw   Shortwave IR 3.8 µm (sensitive to thin cirrus)
+  wv   Water vapor 6.7 µm  (upper-troposphere moisture / cirrus)
+  vis  Visible              (daytime only, no cloud at night)
 
 Usage:
     python3 fetch_gibs_cloud.py
-    python3 fetch_gibs_cloud.py --date 2024-04-28
+    python3 fetch_gibs_cloud.py --time 2024-04-28T18:00:00Z
     python3 fetch_gibs_cloud.py --width 8192 --height 4096
-    python3 fetch_gibs_cloud.py --days 5 --blur-radius 0
+    python3 fetch_gibs_cloud.py --channel wv --blur-radius 0
 
 Output (in output/ dir):
-    CloudGlobal_IR_<date>.png           IR composite (grayscale)
-    CloudGlobal_IR_<date>_CloudMask.png Grayscale cloud density (for UDS)
+    CloudGlobal_GEO_<timestamp>.png           IR composite (grayscale)
+    CloudGlobal_GEO_<timestamp>_CloudMask.png Grayscale cloud density (for UDS)
 
 Stdlib only (urllib + zlib + struct).
 """
@@ -39,26 +44,32 @@ import urllib.request
 import zlib
 
 
-GIBS_WMS = "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi"
+NOWCOAST_WMS = "https://nowcoast.noaa.gov/geoserver/satellite/wms"
 
-# Thermal IR Band 31 (11 µm) — Day+Night, cold cloud tops = bright
-MODIS_LAYERS = [
-    ("MODIS_Terra_Brightness_Temp_Band31_Day_Night", "Terra-IR"),
-    ("MODIS_Aqua_Brightness_Temp_Band31_Day_Night",  "Aqua-IR"),
-]
+# NOAA nowCOAST global merged GEO mosaic layers
+CHANNELS = {
+    "lw":  "global_longwave_imagery_mosaic",   # ~12 µm thermal IR (default)
+    "sw":  "global_shortwave_imagery_mosaic",  # ~3.8 µm shortwave IR
+    "wv":  "global_water_vapor_imagery_mosaic",# ~6.7 µm water vapor
+    "vis": "global_visible_imagery_mosaic",    # visible (daytime only)
+}
 
 
 # ---------------------------------------------------------------------------
 # Network
 # ---------------------------------------------------------------------------
 
-def build_url(layer, width, height, date_str):
-    return GIBS_WMS + "?" + urllib.parse.urlencode({
-        "SERVICE": "WMS", "REQUEST": "GetMap", "VERSION": "1.1.1",
+def build_url(layer, width, height, time_str=None):
+    params = {
+        "SERVICE": "WMS", "REQUEST": "GetMap", "VERSION": "1.3.0",
         "LAYERS": layer, "STYLES": "", "FORMAT": "image/png",
-        "SRS": "EPSG:4326", "WIDTH": str(width), "HEIGHT": str(height),
-        "BBOX": "-180,-90,180,90", "TIME": date_str,
-    })
+        "CRS": "CRS:84",  # lon,lat ordering — avoids WMS 1.3.0 axis-swap
+        "WIDTH": str(width), "HEIGHT": str(height),
+        "BBOX": "-180,-90,180,90",
+    }
+    if time_str:
+        params["TIME"] = time_str
+    return NOWCOAST_WMS + "?" + urllib.parse.urlencode(params)
 
 
 def fetch_bytes(url, timeout=90.0, retries=3):
@@ -69,7 +80,7 @@ def fetch_bytes(url, timeout=90.0, retries=3):
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 data = r.read()
             if not data.startswith(b"\x89PNG\r\n\x1a\n"):
-                raise RuntimeError(f"Not PNG: {data[:120]!r}")
+                raise RuntimeError(f"Not PNG: {data[:200]!r}")
             return data
         except Exception as e:
             if attempt == retries:
@@ -155,17 +166,6 @@ def encode_png_gray(w, h, gray):
 # Post-processing
 # ---------------------------------------------------------------------------
 
-def composite_priority(frames):
-    """Newest-first priority: only fill pure-black (no-data) pixels from older frames."""
-    w, h, result = frames[0]; result = bytearray(result)
-    for _, _, frame in frames[1:]:
-        for i in range(0, w*h*4, 4):
-            if result[i] < 4 and result[i+1] < 4 and result[i+2] < 4:
-                if not (frame[i] < 4 and frame[i+1] < 4 and frame[i+2] < 4):
-                    result[i:i+4] = frame[i:i+4]
-    return w, h, result
-
-
 def box_blur(rgba, w, h, radius):
     if radius <= 0: return
     tmp = bytearray(len(rgba))
@@ -188,11 +188,10 @@ def box_blur(rgba, w, h, radius):
 
 
 def make_cloud_mask(rgba):
-    # IR brightness temperature: cold cloud tops = bright pixel = high cloud density.
-    # Use R channel (grayscale IR is replicated R=G=B, or R alone for colorized).
-    # Threshold: surface temps produce dark pixels; only clouds push toward 255.
+    # IR: cold cloud tops = bright pixel = high cloud density.
+    # Take R channel (IR is grayscale; R=G=B for grayscale PNGs).
     n = len(rgba)//4; gray = bytearray(n)
-    for i in range(n): b=i*4; gray[i] = rgba[b]
+    for i in range(n): gray[i] = rgba[i*4]
     return gray
 
 
@@ -201,66 +200,56 @@ def make_cloud_mask(rgba):
 # ---------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--date", default=None, help="YYYY-MM-DD UTC (default: yesterday)")
-    parser.add_argument("--days",  type=int, default=3, help="Days to composite (default 3)")
-    parser.add_argument("--width",  type=int, default=4096)
-    parser.add_argument("--height", type=int, default=2048)
-    parser.add_argument("--output", default=None)
-    parser.add_argument("--blur-radius", type=int, default=3)
-    parser.add_argument("--no-mask",     action="store_true")
+    parser = argparse.ArgumentParser(
+        description="Fetch NOAA global merged geostationary IR cloud cover.")
+    parser.add_argument("--time",    default=None,
+                        help="ISO 8601 UTC time, e.g. 2024-04-28T18:00:00Z (default: latest)")
+    parser.add_argument("--channel", default="lw", choices=list(CHANNELS),
+                        help="IR channel: lw=longwave(default) sw=shortwave wv=watervapor vis=visible")
+    parser.add_argument("--width",   type=int, default=4096)
+    parser.add_argument("--height",  type=int, default=2048)
+    parser.add_argument("--output",  default=None)
+    parser.add_argument("--blur-radius", type=int, default=2)
+    parser.add_argument("--no-mask", action="store_true")
     args = parser.parse_args()
 
-    today = datetime.datetime.now(datetime.timezone.utc).date()
-    # Default to yesterday so GIBS always has the data fully processed
-    if args.date:
-        end_date = datetime.date.fromisoformat(args.date)
-    else:
-        end_date = today - datetime.timedelta(days=1)
+    layer = CHANNELS[args.channel]
+    tag   = args.time.replace(":", "").replace("-", "") if args.time \
+            else datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
     out_dir = os.path.join(os.path.dirname(__file__), "output")
     os.makedirs(out_dir, exist_ok=True)
 
-    dates = [end_date - datetime.timedelta(days=i) for i in range(args.days)]
-    print(f"MODIS composite  {dates[-1]} → {dates[0]}  |  {args.width}x{args.height}")
-
-    # Fetch order: newest Terra, newest Aqua, then older days interleaved
-    # composite_priority uses frame[0] as highest priority → newest data wins
-    frames = []
-    for d in dates:
-        for layer, label in MODIS_LAYERS:
-            t = d.isoformat()
-            url = build_url(layer, args.width, args.height, t)
-            print(f"  [{label} {t}]...", end=" ", flush=True)
-            try:
-                raw = fetch_bytes(url)
-                frames.append(decode_png(raw))
-                kb = len(raw) // 1024
-                print(f"OK ({kb/1024:.1f}MB)" if kb >= 1024 else f"OK ({kb}KB)")
-            except Exception as e:
-                print(f"SKIP ({e})")
-            time.sleep(0.2)
-
-    if not frames:
-        print("ERROR: all fetches failed", file=sys.stderr)
-        return 1
-
-    out_path  = args.output or os.path.join(out_dir, f"CloudGlobal_IR_{end_date}.png")
+    out_path  = args.output or os.path.join(out_dir, f"CloudGlobal_GEO_{tag}.png")
     mask_path = os.path.splitext(out_path)[0] + "_CloudMask.png"
 
-    print(f"Compositing {len(frames)} frames...")
-    w, h, rgba = composite_priority(frames)
+    url = build_url(layer, args.width, args.height, args.time)
+    desc = f"[NOAA nowCOAST] {layer}"
+    if args.time:
+        desc += f" @ {args.time}"
+    print(f"{desc}  {args.width}x{args.height}...", end=" ", flush=True)
+
+    try:
+        raw = fetch_bytes(url)
+    except Exception as e:
+        print(f"FAILED: {e}", file=sys.stderr)
+        return 1
+
+    kb = len(raw) // 1024
+    print(f"OK ({kb/1024:.1f}MB)" if kb >= 1024 else f"OK ({kb}KB)")
+
+    w, h, rgba = decode_png(raw)
 
     if args.blur_radius > 0:
         print(f"Blur r={args.blur_radius}...", end=" ", flush=True)
         box_blur(rgba, w, h, args.blur_radius); print("done")
 
     with open(out_path, "wb") as f: f.write(encode_png_rgba(w, h, rgba))
-    print(f"TrueColor → {out_path}")
+    print(f"IR composite → {out_path}")
 
     if not args.no_mask:
         with open(mask_path, "wb") as f: f.write(encode_png_gray(w, h, make_cloud_mask(rgba)))
-        print(f"CloudMask → {mask_path}")
+        print(f"CloudMask    → {mask_path}")
 
     return 0
 
