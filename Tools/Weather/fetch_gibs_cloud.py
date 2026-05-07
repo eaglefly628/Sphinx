@@ -4,26 +4,23 @@ Fetch global cloud cover image from NASA GIBS WMS endpoint.
 
 Output: equirectangular PNG (lon -180..180, lat -90..90), full globe.
 Usage:
-    python3 fetch_gibs_cloud.py                         # single day, auto-date
-    python3 fetch_gibs_cloud.py --days 3                # 3-day max composite (recommended)
+    python3 fetch_gibs_cloud.py                    # Terra+Aqua 3-day composite (recommended)
+    python3 fetch_gibs_cloud.py --days 5           # more days, fewer gaps
+    python3 fetch_gibs_cloud.py --sources TerraTrueColor   # single source
     python3 fetch_gibs_cloud.py --date 2024-04-28
-    python3 fetch_gibs_cloud.py --layer VIIRS --width 8192 --height 4096
+    python3 fetch_gibs_cloud.py --width 8192 --height 4096
 
-Layer choices (--layer):
-    TerraTrueColor  (default) MODIS_Terra_CorrectedReflectance_TrueColor
-                              ~10:30 local sun-sync, RGB true color, daily
-    AquaTrueColor             MODIS_Aqua_CorrectedReflectance_TrueColor
-                              ~13:30 local, RGB true color, daily
-    VIIRS                     VIIRS_SNPP_CorrectedReflectance_TrueColor
-                              Higher res, RGB true color, daily
-    CloudFraction             MODIS_Terra_Cloud_Fraction_Day
-                              Palette-encoded cloud %, scientific layer
+Default behavior:
+    Fetches MODIS Terra + MODIS Aqua for the last 3 days (6 frames total),
+    composites them with per-pixel max to fill orbital swath gaps, then
+    runs a scanline gap-fill pass for any remaining black pixels.
+    Automatically generates a grayscale CloudMask PNG in the same directory.
 
-Why --days 3 is recommended:
-    MODIS Terra is sun-synchronous — on a single day, orbital swath gaps
-    appear as black vertical stripes and the night-side is black.
-    Compositing 3 days with per-pixel max fills all gaps (clouds may be
-    up to 2 days old in the gap areas, acceptable for simulation).
+Available sources (--sources, comma-separated):
+    TerraTrueColor   MODIS Terra ~10:30 local, RGB true color
+    AquaTrueColor    MODIS Aqua  ~13:30 local, RGB true color (3h offset fills more gaps)
+    VIIRS            VIIRS/SNPP  higher resolution true color
+    CloudFraction    MODIS Terra cloud fraction (palette-encoded, scientific use)
 
 Stdlib only (urllib + zlib + struct).
 """
@@ -243,67 +240,104 @@ def composite_max(frames: list) -> tuple:
     return w, h, result
 
 
+def gap_fill(rgba: bytearray, w: int, h: int) -> None:
+    """
+    Fill remaining black (no-data) pixels by scanline color propagation.
+    4 directional passes (L→R, R→L, T→B, B→T), repeated twice.
+    Each black pixel takes the color of its nearest non-black neighbor.
+    Pure Python, no external deps. ~5-15s for 4096×2048.
+    """
+    def is_black(i: int) -> bool:
+        return rgba[i] < 4 and rgba[i+1] < 4 and rgba[i+2] < 4
+
+    for _ in range(2):
+        # Left → Right
+        for y in range(h):
+            base = y * w * 4
+            for x in range(1, w):
+                i = base + x * 4
+                if is_black(i):
+                    j = i - 4
+                    rgba[i], rgba[i+1], rgba[i+2] = rgba[j], rgba[j+1], rgba[j+2]
+        # Right → Left
+        for y in range(h):
+            base = y * w * 4
+            for x in range(w - 2, -1, -1):
+                i = base + x * 4
+                if is_black(i):
+                    j = i + 4
+                    rgba[i], rgba[i+1], rgba[i+2] = rgba[j], rgba[j+1], rgba[j+2]
+        # Top → Bottom
+        for x in range(w):
+            for y in range(1, h):
+                i = (y * w + x) * 4
+                if is_black(i):
+                    j = ((y - 1) * w + x) * 4
+                    rgba[i], rgba[i+1], rgba[i+2] = rgba[j], rgba[j+1], rgba[j+2]
+        # Bottom → Top
+        for x in range(w):
+            for y in range(h - 2, -1, -1):
+                i = (y * w + x) * 4
+                if is_black(i):
+                    j = ((y + 1) * w + x) * 4
+                    rgba[i], rgba[i+1], rgba[i+2] = rgba[j], rgba[j+1], rgba[j+2]
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Download global cloud cover from NASA GIBS.")
-    parser.add_argument("--layer", choices=list(LAYERS.keys()), default="TerraTrueColor")
+    parser.add_argument("--sources", default="TerraTrueColor,AquaTrueColor",
+                        help="Comma-separated layer names to composite "
+                             "(default: TerraTrueColor,AquaTrueColor).")
     parser.add_argument("--date",  default=None,
                         help="Most recent date YYYY-MM-DD (UTC). Default: auto-detect.")
     parser.add_argument("--days",  type=int, default=3,
-                        help="Number of days to composite (default 3, fills orbital gaps).")
+                        help="Number of days per source to composite (default 3).")
     parser.add_argument("--width",  type=int, default=4096)
     parser.add_argument("--height", type=int, default=2048)
     parser.add_argument("--output", default=None)
-    parser.add_argument("--no-mask", action="store_true",
-                        help="Skip automatic cloud mask generation.")
+    parser.add_argument("--no-mask",     action="store_true", help="Skip cloud mask generation.")
+    parser.add_argument("--no-gap-fill", action="store_true", help="Skip gap fill pass.")
     args = parser.parse_args()
 
-    layer_id = LAYERS[args.layer]
+    source_names = [s.strip() for s in args.sources.split(",")]
+    for s in source_names:
+        if s not in LAYERS:
+            print(f"ERROR: unknown source '{s}'. Choices: {list(LAYERS.keys())}", file=sys.stderr)
+            return 1
 
+    # Auto-detect date using the first source
     if args.date is None:
         print("Auto-detecting most recent available date...")
-        args.date = find_recent_date(layer_id, args.width, args.height)
+        args.date = find_recent_date(LAYERS[source_names[0]], args.width, args.height)
 
     base_date = datetime.date.fromisoformat(args.date)
     dates = [base_date - datetime.timedelta(days=i) for i in range(args.days)]
 
-    suffix = f"_{args.days}day" if args.days > 1 else ""
     if args.output is None:
         args.output = os.path.join(
             os.path.dirname(__file__), "output",
-            f"CloudGlobal_{args.layer}_{args.date}{suffix}.png",
+            f"CloudGlobal_{args.date}_{args.days}day.png",
         )
     mask_path = os.path.splitext(args.output)[0] + "_CloudMask.png"
 
-    print(f"Layer:  {args.layer} ({layer_id})")
-    print(f"Dates:  {', '.join(d.isoformat() for d in dates)}")
-    print(f"Size:   {args.width}x{args.height} equirectangular")
-    print(f"Output: {args.output}")
+    print(f"Sources: {', '.join(source_names)}")
+    print(f"Dates:   {', '.join(d.isoformat() for d in dates)}")
+    print(f"Frames:  {len(source_names) * len(dates)} total")
+    print(f"Size:    {args.width}x{args.height} equirectangular")
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
 
-    # Fetch — always resolve to (w, h, rgba) so mask generation is unified
-    if args.days == 1:
-        url = build_url(layer_id, args.width, args.height, args.date)
-        print(f"Fetching {args.date}...", end=" ", flush=True)
-        try:
-            raw = fetch_bytes(url)
-        except Exception as e:
-            print(f"\nERROR: {e}", file=sys.stderr)
-            return 1
-        w, h, rgba = decode_png(raw)
-        out_bytes = encode_png_rgba(w, h, rgba)
-        with open(args.output, "wb") as f:
-            f.write(out_bytes)
-        print(f"OK ({len(out_bytes)/1024/1024:.1f} MB)")
-    else:
-        frames = []
+    # Fetch all source×date combinations
+    frames = []
+    for src in source_names:
+        layer_id = LAYERS[src]
         for d in dates:
             ds  = d.isoformat()
             url = build_url(layer_id, args.width, args.height, ds)
-            print(f"  Fetching {ds}...", end=" ", flush=True)
+            print(f"  [{src}] {ds}...", end=" ", flush=True)
             try:
                 raw = fetch_bytes(url)
                 w, h, rgba = decode_png(raw)
@@ -311,32 +345,35 @@ def main() -> int:
                 print(f"OK ({len(raw)/1024/1024:.1f} MB)")
             except Exception as e:
                 print(f"SKIP ({e})")
-            time.sleep(0.3)
+            time.sleep(0.2)
 
-        if not frames:
-            print("ERROR: all fetches failed", file=sys.stderr)
-            return 1
+    if not frames:
+        print("ERROR: all fetches failed", file=sys.stderr)
+        return 1
 
-        print(f"Compositing {len(frames)} frames (max pixel)...")
-        w, h, rgba = composite_max(frames)
-        out_bytes = encode_png_rgba(w, h, rgba)
-        with open(args.output, "wb") as f:
-            f.write(out_bytes)
-        print(f"Wrote {args.output} ({len(out_bytes)/1024/1024:.1f} MB)")
+    print(f"Compositing {len(frames)} frames (max pixel)...")
+    w, h, rgba = composite_max(frames)
 
-    # Cloud mask — generated from the already-decoded RGBA, no extra fetch
+    if not args.no_gap_fill:
+        print("Gap fill (scanline propagation)...", end=" ", flush=True)
+        gap_fill(rgba, w, h)
+        print("done")
+
+    out_bytes = encode_png_rgba(w, h, rgba)
+    with open(args.output, "wb") as f:
+        f.write(out_bytes)
+    print(f"TrueColor → {args.output} ({len(out_bytes)/1024/1024:.1f} MB)")
+
     if not args.no_mask:
-        print("Extracting cloud mask (min-channel)...", end=" ", flush=True)
+        print("Extracting cloud mask...", end=" ", flush=True)
         gray = make_cloud_mask(rgba)
         mask_bytes = encode_png_gray(w, h, gray)
         with open(mask_path, "wb") as f:
             f.write(mask_bytes)
-        print(f"OK ({len(mask_bytes)/1024/1024:.1f} MB)")
-        print(f"  TrueColor → {args.output}")
-        print(f"  CloudMask → {mask_path}")
+        print(f"OK")
+        print(f"CloudMask → {mask_path} ({len(mask_bytes)/1024/1024:.1f} MB)")
 
-    print("\nUE import settings for CloudMask:")
-    print("  Compression: Grayscale  |  sRGB: OFF  |  X: Wrap  |  Y: Clamp  |  Mips: ON")
+    print("\nUE import: Compression=Grayscale | sRGB=OFF | X=Wrap | Y=Clamp | Mips=ON")
     return 0
 
 
