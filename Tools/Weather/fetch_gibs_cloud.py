@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
 """
-Fetch global cloud cover from NASA GIBS geostationary satellites.
+Fetch global cloud cover from NASA GIBS MODIS Terra + Aqua TrueColor.
 
-Three satellites, single day, no orbital swath gaps:
-    GOES-East  18:00 UTC  Americas
-    GOES-West  20:00 UTC  Pacific / W. Americas
-    Himawari   01:00 UTC  Asia / Pacific  (grayscale Band3 — fine for CloudMask)
+3-day priority composite (Terra + Aqua × 3 days = 6 frames):
+  - Newest frame has highest priority.
+  - Older frames fill only the pure-black swath gaps from newer frames.
+  - Result: genuinely global cloud field with no "all clouds" bias.
 
-Europe/Africa gap (~15°W–80°E) left as black = clear sky (no Meteosat in GIBS).
+Cloud mask: min(R,G,B)/255
+  - White/grey clouds  → high value  ✓
+  - Blue ocean / land  → low value   ✓
 
 Usage:
     python3 fetch_gibs_cloud.py
     python3 fetch_gibs_cloud.py --date 2024-04-28
     python3 fetch_gibs_cloud.py --width 8192 --height 4096
-    python3 fetch_gibs_cloud.py --blur-radius 0
+    python3 fetch_gibs_cloud.py --days 5 --blur-radius 0
 
 Output (in output/ dir):
-    CloudGlobal_GEO_<date>.png           TrueColor composite
-    CloudGlobal_GEO_<date>_CloudMask.png Grayscale cloud density (for UDS)
+    CloudGlobal_MODIS_<date>.png           TrueColor composite
+    CloudGlobal_MODIS_<date>_CloudMask.png Grayscale cloud density (for UDS)
 
 Stdlib only (urllib + zlib + struct).
 """
@@ -35,11 +37,9 @@ import zlib
 
 GIBS_WMS = "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi"
 
-# (GIBS layer name, optimal UTC time HH:MM)
-GEO_SOURCES = [
-    ("GOES-East_ABI_GeoColor",             "18:00", "GOES-East"),
-    ("GOES-West_ABI_GeoColor",             "20:00", "GOES-West"),
-    ("Himawari_AHI_Band3_Red_Visible_1km", "01:00", "Himawari"),
+MODIS_LAYERS = [
+    ("MODIS_Terra_CorrectedReflectance_TrueColor", "Terra"),
+    ("MODIS_Aqua_CorrectedReflectance_TrueColor",  "Aqua"),
 ]
 
 
@@ -47,12 +47,12 @@ GEO_SOURCES = [
 # Network
 # ---------------------------------------------------------------------------
 
-def build_url(layer, width, height, time_str):
+def build_url(layer, width, height, date_str):
     return GIBS_WMS + "?" + urllib.parse.urlencode({
         "SERVICE": "WMS", "REQUEST": "GetMap", "VERSION": "1.1.1",
         "LAYERS": layer, "STYLES": "", "FORMAT": "image/png",
         "SRS": "EPSG:4326", "WIDTH": str(width), "HEIGHT": str(height),
-        "BBOX": "-180,-90,180,90", "TIME": time_str,
+        "BBOX": "-180,-90,180,90", "TIME": date_str,
     })
 
 
@@ -151,6 +151,7 @@ def encode_png_gray(w, h, gray):
 # ---------------------------------------------------------------------------
 
 def composite_priority(frames):
+    """Newest-first priority: only fill pure-black (no-data) pixels from older frames."""
     w, h, result = frames[0]; result = bytearray(result)
     for _, _, frame in frames[1:]:
         for i in range(0, w*h*4, 4):
@@ -158,7 +159,6 @@ def composite_priority(frames):
                 if not (frame[i] < 4 and frame[i+1] < 4 and frame[i+2] < 4):
                     result[i:i+4] = frame[i:i+4]
     return w, h, result
-
 
 
 def box_blur(rgba, w, h, radius):
@@ -194,7 +194,8 @@ def make_cloud_mask(rgba):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--date", default=None, help="YYYY-MM-DD UTC (default: today)")
+    parser.add_argument("--date", default=None, help="YYYY-MM-DD UTC (default: yesterday)")
+    parser.add_argument("--days",  type=int, default=3, help="Days to composite (default 3)")
     parser.add_argument("--width",  type=int, default=4096)
     parser.add_argument("--height", type=int, default=2048)
     parser.add_argument("--output", default=None)
@@ -202,39 +203,41 @@ def main():
     parser.add_argument("--no-mask",     action="store_true")
     args = parser.parse_args()
 
-    date = datetime.date.fromisoformat(args.date) if args.date \
-           else datetime.datetime.now(datetime.timezone.utc).date()
+    today = datetime.datetime.now(datetime.timezone.utc).date()
+    # Default to yesterday so GIBS always has the data fully processed
+    if args.date:
+        end_date = datetime.date.fromisoformat(args.date)
+    else:
+        end_date = today - datetime.timedelta(days=1)
 
     out_dir = os.path.join(os.path.dirname(__file__), "output")
     os.makedirs(out_dir, exist_ok=True)
 
-    print(f"Date: {date}  |  {args.width}x{args.height}")
+    dates = [end_date - datetime.timedelta(days=i) for i in range(args.days)]
+    print(f"MODIS composite  {dates[-1]} → {dates[0]}  |  {args.width}x{args.height}")
 
-    # Himawari 01:00 UTC belongs to the previous calendar day
-    # (Asia local noon = next UTC day early morning)
-    himawari_date = date - datetime.timedelta(days=1)
-
-    dates_for_source = [date, date, himawari_date]
-
+    # Fetch order: newest Terra, newest Aqua, then older days interleaved
+    # composite_priority uses frame[0] as highest priority → newest data wins
     frames = []
-    for (layer, hhmm, label), src_date in zip(GEO_SOURCES, dates_for_source):
-        t = f"{src_date}T{hhmm}:00Z"
-        url = build_url(layer, args.width, args.height, t)
-        print(f"  [{label}] {t}...", end=" ", flush=True)
-        try:
-            raw = fetch_bytes(url)
-            frames.append(decode_png(raw))
-            kb = len(raw) // 1024
-            print(f"OK ({kb/1024:.1f}MB)" if kb >= 1024 else f"OK ({kb}KB)")
-        except Exception as e:
-            print(f"SKIP ({e})")
-        time.sleep(0.2)
+    for d in dates:
+        for layer, label in MODIS_LAYERS:
+            t = d.isoformat()
+            url = build_url(layer, args.width, args.height, t)
+            print(f"  [{label} {t}]...", end=" ", flush=True)
+            try:
+                raw = fetch_bytes(url)
+                frames.append(decode_png(raw))
+                kb = len(raw) // 1024
+                print(f"OK ({kb/1024:.1f}MB)" if kb >= 1024 else f"OK ({kb}KB)")
+            except Exception as e:
+                print(f"SKIP ({e})")
+            time.sleep(0.2)
 
     if not frames:
         print("ERROR: all fetches failed", file=sys.stderr)
         return 1
 
-    out_path  = args.output or os.path.join(out_dir, f"CloudGlobal_GEO_{date}.png")
+    out_path  = args.output or os.path.join(out_dir, f"CloudGlobal_MODIS_{end_date}.png")
     mask_path = os.path.splitext(out_path)[0] + "_CloudMask.png"
 
     print(f"Compositing {len(frames)} frames...")
