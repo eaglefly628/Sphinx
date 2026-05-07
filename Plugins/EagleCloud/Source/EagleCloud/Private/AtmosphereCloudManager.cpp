@@ -7,6 +7,8 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Materials/MaterialParameterCollection.h"
 #include "Kismet/KismetMaterialLibrary.h"
+#include "Kismet/GameplayStatics.h"
+#include "UObject/UnrealType.h"
 
 AAtmosphereCloudManager::AAtmosphereCloudManager()
 {
@@ -46,6 +48,7 @@ void AAtmosphereCloudManager::Tick(float DeltaSeconds)
     CurrentUDSDensity = UDSDensity;
 
     ApplyBlend(MacroAlpha, UDSDensity, CurrentAltitudeKm);
+    ApplySkyMode(CurrentAltitudeKm);
 }
 
 double AAtmosphereCloudManager::ComputeCameraAltitudeKm() const
@@ -104,4 +107,105 @@ void AAtmosphereCloudManager::ApplyBlend(float MacroAlpha, float UDSDensity, dou
             }
         }
     }
+}
+
+void AAtmosphereCloudManager::ApplySkyMode(double AltitudeKm)
+{
+    if (!bManageUDSSkyMode) return;
+
+    // Hysteresis around HighAltitudeKm: switch up at High+H, switch down at High-H.
+    // Inside the dead band we keep LastAppliedSkyMode untouched.
+    const int32 SpaceMode      = static_cast<int32>(UDS_SkyMode_Space);
+    const int32 VolumetricMode = static_cast<int32>(UDS_SkyMode_Volumetric);
+
+    int32 DesiredMode = LastAppliedSkyMode;
+    if (AltitudeKm >= HighAltitudeKm + SkyModeSwitchHysteresisKm)
+    {
+        DesiredMode = SpaceMode;
+    }
+    else if (AltitudeKm <= HighAltitudeKm - SkyModeSwitchHysteresisKm)
+    {
+        DesiredMode = VolumetricMode;
+    }
+    else if (LastAppliedSkyMode == -1)
+    {
+        // First tick and we're inside the dead band — pick a side based on altitude.
+        DesiredMode = (AltitudeKm >= HighAltitudeKm) ? SpaceMode : VolumetricMode;
+    }
+
+    if (DesiredMode == LastAppliedSkyMode) return;
+
+    if (!CachedUDS.IsValid())
+    {
+        CachedUDS = FindUDSActor();
+        if (!CachedUDS.IsValid())
+        {
+            // UDS not in level yet — try again next tick
+            return;
+        }
+    }
+
+    AActor* UDS = CachedUDS.Get();
+    FProperty* Prop = UDS->GetClass()->FindPropertyByName(UDS_SkyModeProperty);
+    if (!Prop)
+    {
+        UE_LOG(LogEagleCloud, Warning,
+               TEXT("UDS property '%s' not found — disabling sky mode management. ")
+               TEXT("Verify UDS_SkyModeProperty matches the actual property name."),
+               *UDS_SkyModeProperty.ToString());
+        bManageUDSSkyMode = false;
+        return;
+    }
+
+    bool bWritten = false;
+    if (FByteProperty* BP = CastField<FByteProperty>(Prop))
+    {
+        BP->SetPropertyValue_InContainer(UDS, static_cast<uint8>(DesiredMode));
+        bWritten = true;
+    }
+    else if (FEnumProperty* EP = CastField<FEnumProperty>(Prop))
+    {
+        if (FNumericProperty* Underlying = EP->GetUnderlyingProperty())
+        {
+            void* ValuePtr = EP->ContainerPtrToValuePtr<void>(UDS);
+            if (ValuePtr)
+            {
+                Underlying->SetIntPropertyValue(ValuePtr, static_cast<int64>(DesiredMode));
+                bWritten = true;
+            }
+        }
+    }
+
+    if (bWritten)
+    {
+        LastAppliedSkyMode = DesiredMode;
+        UE_LOG(LogEagleCloud, Log,
+               TEXT("UDS Sky Mode -> %d at altitude %.1f km (%s)"),
+               DesiredMode, AltitudeKm,
+               DesiredMode == SpaceMode ? TEXT("Space") : TEXT("Volumetric"));
+    }
+    else
+    {
+        UE_LOG(LogEagleCloud, Warning,
+               TEXT("UDS property '%s' is neither Byte nor Enum — cannot write sky mode."),
+               *UDS_SkyModeProperty.ToString());
+        bManageUDSSkyMode = false;
+    }
+}
+
+AActor* AAtmosphereCloudManager::FindUDSActor() const
+{
+    UWorld* World = GetWorld();
+    if (!World) return nullptr;
+
+    TArray<AActor*> Found;
+    UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), Found);
+    for (AActor* A : Found)
+    {
+        if (A && A->GetClass()->GetName().Contains(TEXT("Ultra_Dynamic_Sky")))
+        {
+            return A;
+        }
+    }
+    return nullptr;
 }

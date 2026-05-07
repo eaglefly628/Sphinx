@@ -74,6 +74,48 @@ UDS 插件已入库（Git LFS），API 分析完成。集成代码待创建。
 
 ## Changelog
 
+### [v1.3.0] — uds — AtmosphereCloudManager 高空真正切 Sky Mode = Space (P3 代码层完成)
+
+#### 本次提交内容（代码层，已 push 到 `claude/claudeMainBranch-0zjsx`）
+
+**`AAtmosphereCloudManager` 新增 Sky Mode 切换** (P3 来自 v1.2.0 留尾):
+
+之前实现：高空只 fade `AffectsGlobalValues → 0`，UDS volumetric cloud pass 仍在跑，浪费 GPU。
+
+现在实现：相机海拔越过 `HighAltitudeKm ± SkyModeSwitchHysteresisKm` 时，反射写 UDS Actor 的 `Sky Mode` 枚举属性，从 `Volumetric Clouds` 真正切到 `Space`，关闭 volumetric pass。
+
+新增 UPROPERTY (Category `EagleCloud|SkyMode`):
+- `bManageUDSSkyMode` (bool, default true): 自动管理总开关
+- `UDS_SkyModeProperty` (FName, default `"Sky Mode"`): 反射查找的属性名
+- `UDS_SkyMode_Volumetric` (uint8, default 0): UDS 枚举的 Volumetric 值
+- `UDS_SkyMode_Space` (uint8, default 5): UDS 枚举的 Space 值
+- `SkyModeSwitchHysteresisKm` (double, default 25.0): 边界滞回带
+
+实现细节:
+- 反射兼容 `FByteProperty`（旧式 BP enum）和 `FEnumProperty`（UENUM class enum）两种
+- `LastAppliedSkyMode` 状态机记忆，避免每帧 set
+- 无 UDS 时静默退出（`CachedUDS` lazy 查找，下一 tick 重试）
+- 找不到属性时 `bManageUDSSkyMode=false` 自闭包，避免日志洪水
+
+#### 验证清单（编辑器侧）
+
+> 用户上一 session 已生成 NASA PNG（`Tools/Weather/output/CloudGlobal_GEO_*.png` + `*_CloudMask.png`）。
+> 当前正在做 P0 导入（见下一 session 必做清单）。
+> 拉取本 commit 后重新编译插件即可获得 Sky Mode 切换能力。
+
+需要在编辑器里验证（**P3 集成测试**）:
+- [ ] UDS Actor 反射属性名确实是 `"Sky Mode"`（带空格）。如果 UDS BP 变量内部 FName 不一样，编辑器面板里改 `AAtmosphereCloudManager.UDS_SkyModeProperty`。
+- [ ] UDS Sky Mode 枚举顺序是否仍为 Volumetric=0 / Space=5。如 UDS 升级换序，编辑器面板里改 `UDS_SkyMode_Volumetric` / `UDS_SkyMode_Space` 数值。
+- [ ] Play 时垂直爬升越过 `HighAltitudeKm + 25km`（默认 525km），Output Log 应出现 `UDS Sky Mode -> 5 ... (Space)`。GPU profiler 中 Volumetric Cloud pass 应归零。
+- [ ] 反向降落越过 `HighAltitudeKm - 25km`（475km），日志切回 Volumetric。
+- [ ] 在 [475, 525] 抖动飞行，日志**不应**疯狂切换（hysteresis 生效）。
+
+#### 还在 P0~P2 编辑器侧（用户继续中）
+
+参见 v1.2.0 清单。本次 push 不影响该流程，编译完即可继续。
+
+---
+
 ### [v1.2.0] — uds — 全球云图数据管线完成，下一步 UE5 编辑器接入
 
 #### 数据管线状态：完成 ✅

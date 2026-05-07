@@ -70,6 +70,40 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|LOD")
     bool bUseSmoothstep = true;
 
+    // ---------- UDS Sky Mode switch (true volumetric off above HighAltitudeKm) ----------
+    //
+    // Above HighAltitudeKm, fading AffectsGlobalValues alone still leaves UDS's
+    // volumetric cloud pass running — wasting GPU when the macro shell is the
+    // only thing visible. Toggling UDS's Sky Mode enum from "Volumetric Clouds"
+    // to "Space" disables the volumetric pass entirely.
+    //
+    // UDS Sky Mode is a Blueprint enum. Default values match UDS's standard
+    // ordering (Volumetric=0 ... Space=5) but are exposed so users can override
+    // if a UDS update reorders them.
+
+    /** Manage UDS Sky Mode automatically based on altitude. Disable to control manually. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|SkyMode")
+    bool bManageUDSSkyMode = true;
+
+    /** UDS actor property name (Blueprint enum). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|SkyMode|Advanced")
+    FName UDS_SkyModeProperty = TEXT("Sky Mode");
+
+    /** Enum value for "Volumetric Clouds" (default 0 in stock UDS). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|SkyMode|Advanced", meta = (ClampMin = "0", ClampMax = "255"))
+    uint8 UDS_SkyMode_Volumetric = 0;
+
+    /** Enum value for "Space" (default 5 in stock UDS: Volumetric/Static/2D/None/Aurora/Space). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|SkyMode|Advanced", meta = (ClampMin = "0", ClampMax = "255"))
+    uint8 UDS_SkyMode_Space = 5;
+
+    /**
+     * Hysteresis (km) around HighAltitudeKm to avoid mode flapping at the boundary.
+     * Switch to Space when alt > High + H, switch back to Volumetric when alt < High - H.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|SkyMode", meta = (ClampMin = "0"))
+    double SkyModeSwitchHysteresisKm = 25.0;
+
     // ---------- Geo (matches feeder for ground reference) ----------
 
     /**
@@ -122,4 +156,15 @@ private:
 
     /** Write to MPC and/or directly to Feeder + MacroShell. */
     void ApplyBlend(float MacroAlpha, float UDSDensity, double AltitudeKm);
+
+    /** Toggle UDS Sky Mode (Volumetric <-> Space) based on altitude with hysteresis. */
+    void ApplySkyMode(double AltitudeKm);
+
+    /** Locate the Ultra_Dynamic_Sky actor in the level. */
+    AActor* FindUDSActor() const;
+
+    UPROPERTY(Transient) TWeakObjectPtr<AActor> CachedUDS;
+
+    /** Last sky mode we wrote to UDS. -1 = never written yet. */
+    int32 LastAppliedSkyMode = -1;
 };
