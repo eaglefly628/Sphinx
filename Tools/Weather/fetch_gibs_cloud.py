@@ -284,6 +284,44 @@ def gap_fill(rgba: bytearray, w: int, h: int) -> None:
                     rgba[i], rgba[i+1], rgba[i+2] = rgba[j], rgba[j+1], rgba[j+2]
 
 
+def box_blur(rgba: bytearray, w: int, h: int, radius: int) -> None:
+    """
+    Separable box blur on RGB channels (alpha unchanged).
+    Smooths MODIS swath-edge seams caused by oblique viewing angles.
+    Two-pass (horizontal then vertical) prefix-sum approach: O(w*h) per pass.
+    At radius=3 and 4096×2048 this takes ~15-25s in pure Python.
+    """
+    if radius <= 0:
+        return
+
+    tmp = bytearray(len(rgba))
+
+    # Horizontal pass: rgba → tmp
+    for y in range(h):
+        base = y * w * 4
+        for c in range(3):
+            prefix = [0] * (w + 1)
+            for x in range(w):
+                prefix[x + 1] = prefix[x] + rgba[base + x * 4 + c]
+            for x in range(w):
+                lo = max(0, x - radius)
+                hi = min(w - 1, x + radius)
+                tmp[base + x * 4 + c] = (prefix[hi + 1] - prefix[lo]) // (hi - lo + 1)
+        for x in range(w):  # copy alpha unchanged
+            tmp[base + x * 4 + 3] = rgba[base + x * 4 + 3]
+
+    # Vertical pass: tmp → rgba
+    for x in range(w):
+        for c in range(3):
+            prefix = [0] * (h + 1)
+            for y in range(h):
+                prefix[y + 1] = prefix[y] + tmp[(y * w + x) * 4 + c]
+            for y in range(h):
+                lo = max(0, y - radius)
+                hi = min(h - 1, y + radius)
+                rgba[(y * w + x) * 4 + c] = (prefix[hi + 1] - prefix[lo]) // (hi - lo + 1)
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -302,6 +340,8 @@ def main() -> int:
     parser.add_argument("--output", default=None)
     parser.add_argument("--no-mask",     action="store_true", help="Skip cloud mask generation.")
     parser.add_argument("--no-gap-fill", action="store_true", help="Skip gap fill pass.")
+    parser.add_argument("--blur-radius", type=int, default=3,
+                        help="Box blur radius to smooth swath-edge seams (default 3, 0=off).")
     args = parser.parse_args()
 
     source_names = [s.strip() for s in args.sources.split(",")]
@@ -358,6 +398,11 @@ def main() -> int:
     if not args.no_gap_fill:
         print("Gap fill (scanline propagation)...", end=" ", flush=True)
         gap_fill(rgba, w, h)
+        print("done")
+
+    if args.blur_radius > 0:
+        print(f"Blur radius={args.blur_radius} (smoothing swath seams)...", end=" ", flush=True)
+        box_blur(rgba, w, h, args.blur_radius)
         print("done")
 
     out_bytes = encode_png_rgba(w, h, rgba)
