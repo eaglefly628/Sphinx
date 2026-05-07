@@ -211,31 +211,32 @@ def make_cloud_mask(rgba: bytearray) -> bytearray:
 # Multi-day max composite
 # ---------------------------------------------------------------------------
 
-def composite_max(frames: list) -> tuple:
+def composite_priority(frames: list) -> tuple:
     """
-    frames: list of (w, h, rgba_bytearray)
-    Returns (w, h, rgba_bytearray) where each channel is the per-pixel max
-    across all frames. Black pixels (R=G=B=0) are treated as no-data and
-    skipped so gap areas fill from adjacent days.
+    frames: list of (w, h, rgba_bytearray), ordered newest-first.
+
+    For each pixel: keep the newest frame's value if it has real data
+    (not pure black). Only fall back to an older frame when the current
+    pixel is still no-data (black = satellite swath gap or night side).
+
+    This preserves today's actual cloud pattern. Older frames only fill
+    orbital gaps — they never overwrite valid clear-sky data with clouds
+    from a different day. (composite_max was wrong: it made everywhere
+    that was EVER cloudy look cloudy.)
     """
     w, h, base = frames[0]
-    result = bytearray(base)  # start with first frame
+    result = bytearray(base)  # start with newest frame
 
     for _, _, frame in frames[1:]:
         for i in range(0, w * h * 4, 4):
-            r1, g1, b1 = result[i], result[i+1], result[i+2]
-            r2, g2, b2 = frame[i],  frame[i+1],  frame[i+2]
-            # If current pixel is no-data (black), replace unconditionally
-            if r1 == 0 and g1 == 0 and b1 == 0:
-                result[i]   = r2
-                result[i+1] = g2
-                result[i+2] = b2
-                result[i+3] = frame[i+3]
-            # Otherwise take per-channel max (brightens / fills partial gaps)
-            elif not (r2 == 0 and g2 == 0 and b2 == 0):
-                result[i]   = max(r1, r2)
-                result[i+1] = max(g1, g2)
-                result[i+2] = max(b1, b2)
+            # Only fill pixels that are still no-data in the result
+            if result[i] < 4 and result[i+1] < 4 and result[i+2] < 4:
+                r2, g2, b2 = frame[i], frame[i+1], frame[i+2]
+                if not (r2 < 4 and g2 < 4 and b2 < 4):
+                    result[i]   = r2
+                    result[i+1] = g2
+                    result[i+2] = b2
+                    result[i+3] = frame[i+3]
 
     return w, h, result
 
@@ -351,8 +352,8 @@ def main() -> int:
         print("ERROR: all fetches failed", file=sys.stderr)
         return 1
 
-    print(f"Compositing {len(frames)} frames (max pixel)...")
-    w, h, rgba = composite_max(frames)
+    print(f"Compositing {len(frames)} frames (priority: newest-first gap fill)...")
+    w, h, rgba = composite_priority(frames)
 
     if not args.no_gap_fill:
         print("Gap fill (scanline propagation)...", end=" ", flush=True)
