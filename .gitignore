@@ -35,3 +35,6 @@ Plugins/CesiumForUnreal/extern/build/
 .DS_Store
 Thumbs.db
 Plugins/CesiumForUnreal/extern/
+
+# Generated weather data (re-run fetch_gibs_cloud.py + extract_cloud_mask.py to regenerate)
+Tools/Weather/output/
