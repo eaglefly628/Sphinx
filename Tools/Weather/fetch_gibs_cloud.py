@@ -56,13 +56,22 @@ def build_url(layer, width, height, time_str):
     })
 
 
-def fetch_bytes(url, timeout=90.0):
+def fetch_bytes(url, timeout=90.0, retries=3):
     req = urllib.request.Request(url, headers={"User-Agent": "EagleCloud/1.0"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        data = r.read()
-    if not data.startswith(b"\x89PNG\r\n\x1a\n"):
-        raise RuntimeError(f"Not PNG: {data[:120]!r}")
-    return data
+    delay = 2
+    for attempt in range(retries + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                data = r.read()
+            if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+                raise RuntimeError(f"Not PNG: {data[:120]!r}")
+            return data
+        except Exception as e:
+            if attempt == retries:
+                raise
+            print(f"retry {attempt+1}/{retries} ({e})...", end=" ", flush=True)
+            time.sleep(delay)
+            delay *= 2
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +224,8 @@ def main():
         try:
             raw = fetch_bytes(url)
             frames.append(decode_png(raw))
-            print(f"OK ({len(raw)//1024//1024}MB)")
+            kb = len(raw) // 1024
+            print(f"OK ({kb/1024:.1f}MB)" if kb >= 1024 else f"OK ({kb}KB)")
         except Exception as e:
             print(f"SKIP ({e})")
         time.sleep(0.2)
