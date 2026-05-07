@@ -83,7 +83,7 @@ def fetch(url: str, out_path: str, timeout: float = 60.0) -> int:
 
 def find_recent_date(layer_id: str, width: int, height: int, max_days_back: int = 5) -> str:
     """Try today UTC, fall back day-by-day until we get valid PNG."""
-    today = datetime.datetime.utcnow().date()
+    today = datetime.datetime.now(datetime.timezone.utc).date()
     for offset in range(max_days_back + 1):
         d = today - datetime.timedelta(days=offset)
         ds = d.isoformat()
