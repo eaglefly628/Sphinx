@@ -97,6 +97,11 @@ void AAtmosphereCloudManager::ApplyBlend(float MacroAlpha, float UDSDensity, dou
             UKismetMaterialLibrary::SetScalarParameterValue(World, MPC, MPC_UDSDensity, UDSDensity);
             UKismetMaterialLibrary::SetScalarParameterValue(World, MPC, MPC_AltitudeKm,
                                                              static_cast<float>(AltitudeKm));
+            if (Feeder)
+            {
+                UKismetMaterialLibrary::SetScalarParameterValue(World, MPC, MPC_NoDataThreshold,
+                                                                 Feeder->NoDataThreshold);
+            }
         }
     }
 }

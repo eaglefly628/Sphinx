@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """
-Fetch global cloud cover from NASA GIBS MODIS Terra + Aqua TrueColor.
+Fetch global cloud cover from NASA GIBS MODIS Terra + Aqua Infrared (Band 31).
+
+Uses THERMAL INFRARED (10.78–11.28 µm), not visible light:
+  - Day AND Night coverage — no half-globe black area.
+  - Cold cloud tops (200–240 K) → bright in IR display → high cloud density.
+  - Warm ocean/land surface (280–310 K) → dark in IR display → low density.
 
 3-day priority composite (Terra + Aqua × 3 days = 6 frames):
   - Newest frame has highest priority.
   - Older frames fill only the pure-black swath gaps from newer frames.
-  - Result: genuinely global cloud field with no "all clouds" bias.
 
-Cloud mask: min(R,G,B)/255
-  - White/grey clouds  → high value  ✓
-  - Blue ocean / land  → low value   ✓
+Cloud mask: brightness / 255  (IR: cold cloud tops = bright)
+  - High cloud → cold → bright pixel → high density  ✓
+  - Clear surface → warm → dark pixel → low density  ✓
 
 Usage:
     python3 fetch_gibs_cloud.py
@@ -18,8 +22,8 @@ Usage:
     python3 fetch_gibs_cloud.py --days 5 --blur-radius 0
 
 Output (in output/ dir):
-    CloudGlobal_MODIS_<date>.png           TrueColor composite
-    CloudGlobal_MODIS_<date>_CloudMask.png Grayscale cloud density (for UDS)
+    CloudGlobal_IR_<date>.png           IR composite (grayscale)
+    CloudGlobal_IR_<date>_CloudMask.png Grayscale cloud density (for UDS)
 
 Stdlib only (urllib + zlib + struct).
 """
@@ -37,9 +41,10 @@ import zlib
 
 GIBS_WMS = "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi"
 
+# Thermal IR Band 31 (11 µm) — Day+Night, cold cloud tops = bright
 MODIS_LAYERS = [
-    ("MODIS_Terra_CorrectedReflectance_TrueColor", "Terra"),
-    ("MODIS_Aqua_CorrectedReflectance_TrueColor",  "Aqua"),
+    ("MODIS_Terra_Brightness_Temp_Band31_Day_Night", "Terra-IR"),
+    ("MODIS_Aqua_Brightness_Temp_Band31_Day_Night",  "Aqua-IR"),
 ]
 
 
@@ -183,8 +188,11 @@ def box_blur(rgba, w, h, radius):
 
 
 def make_cloud_mask(rgba):
+    # IR brightness temperature: cold cloud tops = bright pixel = high cloud density.
+    # Use R channel (grayscale IR is replicated R=G=B, or R alone for colorized).
+    # Threshold: surface temps produce dark pixels; only clouds push toward 255.
     n = len(rgba)//4; gray = bytearray(n)
-    for i in range(n): b=i*4; gray[i]=min(rgba[b],rgba[b+1],rgba[b+2])
+    for i in range(n): b=i*4; gray[i] = rgba[b]
     return gray
 
 
@@ -237,7 +245,7 @@ def main():
         print("ERROR: all fetches failed", file=sys.stderr)
         return 1
 
-    out_path  = args.output or os.path.join(out_dir, f"CloudGlobal_MODIS_{end_date}.png")
+    out_path  = args.output or os.path.join(out_dir, f"CloudGlobal_IR_{end_date}.png")
     mask_path = os.path.splitext(out_path)[0] + "_CloudMask.png"
 
     print(f"Compositing {len(frames)} frames...")

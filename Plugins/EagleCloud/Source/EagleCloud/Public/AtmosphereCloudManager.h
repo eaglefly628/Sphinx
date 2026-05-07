@@ -94,6 +94,16 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|MPC")
     FName MPC_AltitudeKm = TEXT("AltitudeKm");
 
+    /**
+     * Scalar param name in MPC for no-data fallback threshold (forwarded from
+     * Feeder->NoDataThreshold each tick). M_AtmosphereShell reads this to blend
+     * procedural noise into pixels where NASA_Density < threshold:
+     *   FallbackMask = 1 - smoothstep(0, NoDataThreshold, NASADensity)
+     *   Final = lerp(NASADensity, ProceduralNoise * 0.5, FallbackMask)
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|MPC")
+    FName MPC_NoDataThreshold = TEXT("NoDataThreshold");
+
     /** Last computed values (read-only, exposed for debug). */
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "EagleCloud|Debug")
     double CurrentAltitudeKm = 0.0;

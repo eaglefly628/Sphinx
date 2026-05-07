@@ -95,6 +95,18 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud", meta = (ClampMin = "0", ClampMax = "1"))
     float AffectsGlobalValues = 1.0f;
 
+    /**
+     * No-data fallback threshold (0..1). Pixels darker than this in the cloud texture
+     * are treated as "no data" and blended with ProceduralFallbackDensity in the
+     * M_AtmosphereShell material (NASA_Density < threshold → lerp to procedural noise).
+     * Set to 0 to disable fallback entirely.
+     * Material node logic (in M_AtmosphereShell / cloud coverage material):
+     *   FallbackMask = 1 - smoothstep(0, NoDataThreshold, NASA_Density)
+     *   Final = lerp(NASA_Density, Procedural_Density * 0.5, FallbackMask)
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|Fallback", meta = (ClampMin = "0", ClampMax = "1"))
+    float NoDataThreshold = 0.05f;
+
     /** Push the right texture into UDS now. Returns true on success. */
     UFUNCTION(BlueprintCallable, CallInEditor, Category = "EagleCloud")
     bool ApplyToUDS();
