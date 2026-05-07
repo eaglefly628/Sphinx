@@ -1,18 +1,37 @@
 // AtmosphereCloudManager.cpp
+//
+// LOD blender between macro shell and UDS volumetric. UDS access is delegated
+// to AEagleCloudUDSBridge — no string reflection here.
+//
 #include "AtmosphereCloudManager.h"
 #include "EagleCloudModule.h"
 #include "SatelliteCloudFeeder.h"
+#include "EagleCloudUDSBridge.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Materials/MaterialParameterCollection.h"
 #include "Kismet/KismetMaterialLibrary.h"
-#include "Kismet/GameplayStatics.h"
-#include "UObject/UnrealType.h"
 
 AAtmosphereCloudManager::AAtmosphereCloudManager()
 {
     PrimaryActorTick.bCanEverTick = true;
+}
+
+void AAtmosphereCloudManager::BeginPlay()
+{
+    Super::BeginPlay();
+
+    // Spare the user one drag: if Bridge wasn't set on Manager, borrow from Feeder.
+    if (!Bridge && Feeder)
+    {
+        Bridge = Feeder->Bridge;
+    }
+
+    ensureMsgf(Bridge,
+               TEXT("AAtmosphereCloudManager: no Bridge (neither Manager.Bridge nor Feeder->Bridge). "
+                    "Sky Mode management will be skipped. Drop a BP_EagleCloudBridge into the level "
+                    "and assign it to Feeder.Bridge or Manager.Bridge."));
 }
 
 void AAtmosphereCloudManager::Tick(float DeltaSeconds)
@@ -41,7 +60,6 @@ void AAtmosphereCloudManager::Tick(float DeltaSeconds)
     }
 
     const float MacroAlpha = T;
-    // UDS density inversely fades — but stays at 1 below LowAltitudeKm
     const float UDSDensity = 1.f - T;
 
     CurrentMacroAlpha = MacroAlpha;
@@ -65,21 +83,15 @@ double AAtmosphereCloudManager::ComputeCameraAltitudeKm() const
 
 void AAtmosphereCloudManager::ApplyBlend(float MacroAlpha, float UDSDensity, double AltitudeKm)
 {
-    // 1. Drive UDS through the feeder. Painted Coverage Affects Global Values
-    //    determines how much the painted RT replaces UDS's own cloud coverage.
-    //    Above HighAltitudeKm we set it to ~UDSDensity (=0) so volumetric clouds
-    //    fade out — combined with UDS's own cloud coverage going to 0 from MPC
-    //    (handled by user material logic), volumetric is effectively off.
+    // 1. Drive UDS coverage strength through the feeder's painted-coverage params.
+    //    Feeder.SyncPropertiesToUDS pushes the new values through the bridge.
     if (Feeder)
     {
         Feeder->AffectsGlobalValues = UDSDensity;
-        // Sync only float props to UDS — does NOT redraw the RT.
-        // The RT blit is controlled by Feeder's own RefreshIntervalSeconds timer.
         Feeder->SyncPropertiesToUDS();
     }
 
-    // 2. Toggle macro shell visibility. Below low altitude, hide entirely to
-    //    skip drawcall (Gemini's optimization tip).
+    // 2. Toggle macro shell visibility. Below low altitude, hide entirely to skip drawcall.
     if (MacroShellActor)
     {
         const bool bShouldShow = MacroAlpha > 0.001f;
@@ -89,8 +101,7 @@ void AAtmosphereCloudManager::ApplyBlend(float MacroAlpha, float UDSDensity, dou
         }
     }
 
-    // 3. Write blend factors to MPC for material consumption (sphere shell alpha,
-    //    optional UDS density override in cloud material).
+    // 3. Write blend factors to MPC for material consumption.
     if (MPC)
     {
         UWorld* World = GetWorld();
@@ -111,10 +122,8 @@ void AAtmosphereCloudManager::ApplyBlend(float MacroAlpha, float UDSDensity, dou
 
 void AAtmosphereCloudManager::ApplySkyMode(double AltitudeKm)
 {
-    if (!bManageUDSSkyMode) return;
+    if (!bManageUDSSkyMode || !Bridge) return;
 
-    // Hysteresis around HighAltitudeKm: switch up at High+H, switch down at High-H.
-    // Inside the dead band we keep LastAppliedSkyMode untouched.
     const int32 SpaceMode      = static_cast<int32>(UDS_SkyMode_Space);
     const int32 VolumetricMode = static_cast<int32>(UDS_SkyMode_Volumetric);
 
@@ -129,83 +138,17 @@ void AAtmosphereCloudManager::ApplySkyMode(double AltitudeKm)
     }
     else if (LastAppliedSkyMode == -1)
     {
-        // First tick and we're inside the dead band — pick a side based on altitude.
+        // First tick inside the dead band — pick a side based on altitude.
         DesiredMode = (AltitudeKm >= HighAltitudeKm) ? SpaceMode : VolumetricMode;
     }
 
     if (DesiredMode == LastAppliedSkyMode) return;
 
-    if (!CachedUDS.IsValid())
-    {
-        CachedUDS = FindUDSActor();
-        if (!CachedUDS.IsValid())
-        {
-            // UDS not in level yet — try again next tick
-            return;
-        }
-    }
+    Bridge->SetSkyMode(DesiredMode);
+    LastAppliedSkyMode = DesiredMode;
 
-    AActor* UDS = CachedUDS.Get();
-    FProperty* Prop = UDS->GetClass()->FindPropertyByName(UDS_SkyModeProperty);
-    if (!Prop)
-    {
-        UE_LOG(LogEagleCloud, Warning,
-               TEXT("UDS property '%s' not found — disabling sky mode management. ")
-               TEXT("Verify UDS_SkyModeProperty matches the actual property name."),
-               *UDS_SkyModeProperty.ToString());
-        bManageUDSSkyMode = false;
-        return;
-    }
-
-    bool bWritten = false;
-    if (FByteProperty* BP = CastField<FByteProperty>(Prop))
-    {
-        BP->SetPropertyValue_InContainer(UDS, static_cast<uint8>(DesiredMode));
-        bWritten = true;
-    }
-    else if (FEnumProperty* EP = CastField<FEnumProperty>(Prop))
-    {
-        if (FNumericProperty* Underlying = EP->GetUnderlyingProperty())
-        {
-            void* ValuePtr = EP->ContainerPtrToValuePtr<void>(UDS);
-            if (ValuePtr)
-            {
-                Underlying->SetIntPropertyValue(ValuePtr, static_cast<int64>(DesiredMode));
-                bWritten = true;
-            }
-        }
-    }
-
-    if (bWritten)
-    {
-        LastAppliedSkyMode = DesiredMode;
-        UE_LOG(LogEagleCloud, Log,
-               TEXT("UDS Sky Mode -> %d at altitude %.1f km (%s)"),
-               DesiredMode, AltitudeKm,
-               DesiredMode == SpaceMode ? TEXT("Space") : TEXT("Volumetric"));
-    }
-    else
-    {
-        UE_LOG(LogEagleCloud, Warning,
-               TEXT("UDS property '%s' is neither Byte nor Enum — cannot write sky mode."),
-               *UDS_SkyModeProperty.ToString());
-        bManageUDSSkyMode = false;
-    }
-}
-
-AActor* AAtmosphereCloudManager::FindUDSActor() const
-{
-    UWorld* World = GetWorld();
-    if (!World) return nullptr;
-
-    TArray<AActor*> Found;
-    UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), Found);
-    for (AActor* A : Found)
-    {
-        if (A && A->GetClass()->GetName().Contains(TEXT("Ultra_Dynamic_Sky")))
-        {
-            return A;
-        }
-    }
-    return nullptr;
+    UE_LOG(LogEagleCloud, Log,
+           TEXT("UDS Sky Mode -> %d at altitude %.1f km (%s)"),
+           DesiredMode, AltitudeKm,
+           DesiredMode == SpaceMode ? TEXT("Space") : TEXT("Volumetric"));
 }

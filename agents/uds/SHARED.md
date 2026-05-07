@@ -74,6 +74,103 @@ UDS 插件已入库（Git LFS），API 分析完成。集成代码待创建。
 
 ## Changelog
 
+### [v1.4.0] — uds — 重构：BP Bridge 桥接模式（消除字符串反射）
+
+#### 背景
+
+v1.0.0 ~ v1.3.0 的 EagleCloud 通过 `FProperty + FindPropertyByName` 反射访问 UDS 9.x 的 BP 变量（"Cloud Painting Active"、"Cloud Coverage Render Target" 等）。在 v1.3.0 后用户调试 P0 时发现：
+- Feeder 的反射调用全部"安静成功"（`GetObjectProp` 静默 return null），但天上没出 NASA 云图
+- Details 面板搜不到 `Cloud Coverage Render Target` 字段，强烈怀疑 UDS 9.3A 的 BP 变量内部 FName 与我们假设不一致
+- 即使加了 `bVerboseLogging` + `DumpUDSState` 一键诊断，仍是事后定位，不是事前防御
+
+经主程审议（用户提出）：**字符串反射 = 定时炸弹**。三方案对比后选**方案一：BP Bridge**。
+
+#### 架构变更
+
+新增 C++ 类 **`AEagleCloudUDSBridge`** (`Plugins/EagleCloud/Source/EagleCloud/Public/EagleCloudUDSBridge.h`):
+- 派生自 `AActor`
+- 5 个 `BlueprintImplementableEvent`：
+  - `bool InitializeUDS()`
+  - `UTextureRenderTarget2D* GetUDSCloudRT()`
+  - `void SetCoverageWindow(FVector2D WorldXY)`
+  - `void SetPaintingState(bool bActive, bool bForce, float Opacity, float AffectsGlobal)`
+  - `void SetSkyMode(int32 ModeIndex)`
+- C++ cpp 不实现这些 Event（只构造函数），由 BP 子类 `BP_EagleCloudBridge` 实现
+
+`ASatelliteCloudFeeder` (改造):
+- 删 `FindUDSActor` / `GetUDSCloudRT` / `EnableUDSPainting` / `SetUDSTargetLocation` / `DumpUDSState` / namespace 内 5 个反射 helper
+- 删 `CachedUDS`
+- 新增 `TObjectPtr<AEagleCloudUDSBridge> Bridge` UPROPERTY
+- `BeginPlay` 加 `ensureMsgf(Bridge, ...)` 守卫，null 时禁用 Tick
+- `ApplyToUDS` 改为：调 `Bridge->SetPaintingState(...)` → `Bridge->GetUDSCloudRT()` → Canvas Draw → `Bridge->SetCoverageWindow(WorldXY)`
+- `SyncPropertiesToUDS` 改为：调 `Bridge->SetPaintingState(...)`
+- `RefreshIntervalSeconds` 默认 0 → **0.2**（0 = BeginPlay 一次跑然后再不重试，是高发坑）
+- `bVerboseLogging` 默认 true → **false**（Bridge 失败现在 BP 编译期暴露，不需要默认开 verbose）
+
+`AAtmosphereCloudManager` (改造):
+- 删 `FindUDSActor` / `CachedUDS` / `UDS_SkyModeProperty`（不再需要属性名字符串）
+- 保留 `UDS_SkyMode_Volumetric` / `UDS_SkyMode_Space` 作为传 Bridge 的整数索引
+- 新增 `TObjectPtr<AEagleCloudUDSBridge> Bridge` UPROPERTY，`BeginPlay` 时若 null 自动从 `Feeder->Bridge` 借（用户少拖一次）
+- `ApplySkyMode` 改为：算出 DesiredMode → `Bridge->SetSkyMode(DesiredMode)`
+- 删 `Kismet/GameplayStatics.h` / `UObject/UnrealType.h` 等反射相关 include
+
+代码量：C++ 净减约 **170 行**（v1.3.0 的反射诊断代码 + 旧 helper 全部移除），可读性 ↑↑。
+
+#### 用户必做（编辑器侧，约 5 分钟）
+
+> 拉代码 + 重编后必须做这一步，否则 `ensureMsgf(Bridge, ...)` 会在 PIE 启动时弹断言对话框。
+
+**Step A — 创建 BP 子类**
+1. UE Editor → Content Browser → 进入 `Plugins/EagleCloud/` 任意位置
+2. 右键空白 → **Blueprint Class** → 弹窗选 **All Classes** → 搜 `EagleCloudUDSBridge` → 选中 → Select
+3. 命名 `BP_EagleCloudBridge` → 创建
+
+**Step B — 实现 5 个 Event**
+
+打开 `BP_EagleCloudBridge` → 切到 **Event Graph** → 右键 → 搜 "Initialize UDS"（事件名）→ 选 `Event Initialize UDS` → 添加。同样添加另外 4 个 `Event Get UDSCloud RT` / `Event Set Coverage Window` / `Event Set Painting State` / `Event Set Sky Mode`。
+
+蓝图变量 → 加一个 `CachedUDS` (Type: `Ultra_Dynamic_Sky` 或 `Actor`)。
+
+每个 Event 实现：
+
+| Event | 实现 |
+|---|---|
+| `Initialize UDS` (Output: `Return Value` Bool) | `Get All Actors of Class (Ultra_Dynamic_Sky)` → `Get [0]` → `Set CachedUDS` → 同时 `Set CachedUDS.Cloud Painting Active = true`、`Set CachedUDS.Force Cloud Coverage Target Active = true` → `Is Valid (CachedUDS)` 接 `Return Value` |
+| `Get UDS Cloud RT` (Output: `Return Value` `Texture Render Target 2D`) | `CachedUDS` → `Get Cloud Coverage Render Target`（拖出引脚找）→ 接 `Return Value` |
+| `Set Coverage Window` (Input: `WorldXY` FVector2D) | `CachedUDS` → `Set Cloud Coverage Target Location` 输入引脚连 `WorldXY` |
+| `Set Painting State` (Inputs: bActive, bForce, Opacity, AffectsGlobal) | `CachedUDS` → 4 个 `Set Variable` 节点串起来：`Cloud Painting Active`/`Force Cloud Coverage Target Active`/`Painted Cloud Coverage Opacity`/`Painted Coverage Affects Global Values` |
+| `Set Sky Mode` (Input: `ModeIndex` int32) | `CachedUDS` → `Set Sky Mode` → 输入引脚需要 enum，BP 里**右键 ModeIndex 引脚 → "Cast to <UDS_SkyMode 枚举>"**（或用 `Equal` + `Select Enum` 做 dispatch）|
+
+> **如果 UDS 9.3A 中变量名不是上面这些**：BP 编译时引脚就连不上，红字直接告诉你字段叫什么。改成对的就行。这是 BP Bridge 比反射强的核心点。
+
+> Compile + Save 整个 BP。
+
+**Step C — 关卡布置**
+1. 关卡里**拖一个 `BP_EagleCloudBridge` Actor** 进 Outliner（位置随便）
+2. 选 `ASatelliteCloudFeeder` Actor → Details → **EagleCloud | Bridge** → **Bridge** 字段拖 `BP_EagleCloudBridge`
+3. 选 `AAtmosphereCloudManager` Actor → Details → **EagleCloud | Refs** → **Bridge** 字段也拖（或留 None，BeginPlay 会从 Feeder 借）
+
+**Step D — 验证**
+- Play → Output Log 过滤 `LogEagleCloud`
+- 应该看到：
+  ```
+  ===== SatelliteCloudFeeder START =====
+  Mode: GLOBAL (sample by lat/lon)
+  Bridge.InitializeUDS() -> OK
+  ```
+- 没有 `ensureMsgf` 弹窗
+- 天上 UDS 体积云开始呈现 NASA 全球云图图案
+
+#### 兜底（方案二）
+
+C++ 内任何残留反射点（未来如果需要）必须用 `ensureMsgf` 让失败响亮。BP Bridge 接口本身已不再有反射，本次保留无残留点。
+
+#### 还在 P0~P2 编辑器侧（用户继续中）
+
+参见 v1.2.0 清单。本次重构**只改了"如何与 UDS 通信"**，不改导入纹理 / MPC / M_AtmosphereShell / 球壳 Mesh 这条管线。`MPC_AtmosphereCloud` 4 标量、`M_AtmosphereShell` 都不变。
+
+---
+
 ### [v1.3.0] — uds — AtmosphereCloudManager 高空真正切 Sky Mode = Space (P3 代码层完成)
 
 #### 本次提交内容（代码层，已 push 到 `claude/claudeMainBranch-0zjsx`）

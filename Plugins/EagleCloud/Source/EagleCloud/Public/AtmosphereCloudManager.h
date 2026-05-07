@@ -8,21 +8,20 @@
 //   Altitude > HighAltitudeKm   -> Space view
 //     - MacroAlpha   = 1  (sphere shell fully visible)
 //     - UDSDensity   = 0  (volumetric clouds turned off, save GPU)
+//     - UDS Sky Mode -> Space (truly disables volumetric pass)
 //
 //   Low < Altitude < High       -> Transition band
 //     - T = (Altitude - LowAltitudeKm) / (HighAltitudeKm - LowAltitudeKm)
 //     - MacroAlpha   = T
 //     - UDSDensity   = 1 - T  (with optional smoothstep curve)
+//     - UDS Sky Mode follows the side of HighAltitudeKm we're on (with hysteresis)
 //
 //   Altitude < LowAltitudeKm    -> Ground view
-//     - MacroAlpha   = 0  (shell hidden — set Visible=false to skip drawcall)
+//     - MacroAlpha   = 0  (shell hidden — Visible=false to skip drawcall)
 //     - UDSDensity   = 1  (volumetric only)
+//     - UDS Sky Mode = Volumetric Clouds
 //
-// MacroAlpha is exposed via a Material Parameter Collection (assigned by user)
-// so the sphere shell material reads the same value. UDSDensity is applied as
-// the SatelliteCloudFeeder.AffectsGlobalValues parameter (UDS Painted Coverage
-// Affects Global Values), which scales how much the painted RT replaces UDS's
-// own cloud coverage value.
+// All UDS access is delegated to AEagleCloudUDSBridge — no string reflection.
 //
 #pragma once
 
@@ -31,8 +30,8 @@
 #include "AtmosphereCloudManager.generated.h"
 
 class ASatelliteCloudFeeder;
-class AStaticMeshActor;
 class UMaterialParameterCollection;
+class AEagleCloudUDSBridge;
 
 UCLASS(BlueprintType, Blueprintable, ClassGroup=(EagleCloud))
 class EAGLECLOUD_API AAtmosphereCloudManager : public AActor
@@ -56,50 +55,45 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|Refs")
     TObjectPtr<UMaterialParameterCollection> MPC = nullptr;
 
+    /**
+     * BP bridge for UDS Sky Mode writes. If left null, BeginPlay falls back
+     * to Feeder->Bridge so users can drag the bridge once.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|Refs")
+    TObjectPtr<AEagleCloudUDSBridge> Bridge = nullptr;
+
     // ---------- LOD thresholds ----------
 
-    /** Below this altitude (km), volumetric only. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|LOD", meta = (ClampMin = "0"))
     double LowAltitudeKm = 20.0;
 
-    /** Above this altitude (km), macro shell only (UDS volumetric off). */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|LOD", meta = (ClampMin = "1"))
     double HighAltitudeKm = 500.0;
 
-    /** Use smoothstep curve for the transition (vs linear lerp). */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|LOD")
     bool bUseSmoothstep = true;
 
-    // ---------- UDS Sky Mode switch (true volumetric off above HighAltitudeKm) ----------
-    //
-    // Above HighAltitudeKm, fading AffectsGlobalValues alone still leaves UDS's
-    // volumetric cloud pass running — wasting GPU when the macro shell is the
-    // only thing visible. Toggling UDS's Sky Mode enum from "Volumetric Clouds"
-    // to "Space" disables the volumetric pass entirely.
-    //
-    // UDS Sky Mode is a Blueprint enum. Default values match UDS's standard
-    // ordering (Volumetric=0 ... Space=5) but are exposed so users can override
-    // if a UDS update reorders them.
+    // ---------- UDS Sky Mode switch ----------
 
     /** Manage UDS Sky Mode automatically based on altitude. Disable to control manually. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|SkyMode")
     bool bManageUDSSkyMode = true;
 
-    /** UDS actor property name (Blueprint enum). */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|SkyMode|Advanced")
-    FName UDS_SkyModeProperty = TEXT("Sky Mode");
-
-    /** Enum value for "Volumetric Clouds" (default 0 in stock UDS). */
+    /**
+     * Enum index for "Volumetric Clouds" (default 0 in stock UDS 9.x:
+     * Volumetric / Static / 2D Dynamic / None / Aurora / Space).
+     * Cast to UDS's enum type happens in BP_EagleCloudBridge.SetSkyMode.
+     */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|SkyMode|Advanced", meta = (ClampMin = "0", ClampMax = "255"))
     uint8 UDS_SkyMode_Volumetric = 0;
 
-    /** Enum value for "Space" (default 5 in stock UDS: Volumetric/Static/2D/None/Aurora/Space). */
+    /** Enum index for "Space" (default 5 in stock UDS 9.x). */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|SkyMode|Advanced", meta = (ClampMin = "0", ClampMax = "255"))
     uint8 UDS_SkyMode_Space = 5;
 
     /**
      * Hysteresis (km) around HighAltitudeKm to avoid mode flapping at the boundary.
-     * Switch to Space when alt > High + H, switch back to Volumetric when alt < High - H.
+     * Switch to Space at alt > High + H, switch back to Volumetric at alt < High - H.
      */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|SkyMode", meta = (ClampMin = "0"))
     double SkyModeSwitchHysteresisKm = 25.0;
@@ -107,34 +101,23 @@ public:
     // ---------- Geo (matches feeder for ground reference) ----------
 
     /**
-     * Z (UE world cm) of the ground / sea level reference. Camera altitude is
-     * computed as (CameraZ - GroundZ) / 100000 km. For Cesium-based projects,
-     * keep this at 0 and rely on Cesium for absolute height (future).
+     * Z (UE world cm) of ground/sea-level reference. Camera altitude is
+     * (CameraZ - GroundZ) / 100000 km. For Cesium projects keep at 0.
      */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|Geo")
     double GroundReferenceZ = 0.0;
 
     // ---------- MPC parameter names ----------
 
-    /** Scalar param name in MPC to receive macro shell alpha. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|MPC")
     FName MPC_MacroAlpha = TEXT("MacroAlpha");
 
-    /** Scalar param name in MPC to receive UDS volumetric density mix (0..1). */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|MPC")
     FName MPC_UDSDensity = TEXT("UDSDensity");
 
-    /** Scalar param name in MPC to receive current altitude (km). */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|MPC")
     FName MPC_AltitudeKm = TEXT("AltitudeKm");
 
-    /**
-     * Scalar param name in MPC for no-data fallback threshold (forwarded from
-     * Feeder->NoDataThreshold each tick). M_AtmosphereShell reads this to blend
-     * procedural noise into pixels where NASA_Density < threshold:
-     *   FallbackMask = 1 - smoothstep(0, NoDataThreshold, NASADensity)
-     *   Final = lerp(NASADensity, ProceduralNoise * 0.5, FallbackMask)
-     */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|MPC")
     FName MPC_NoDataThreshold = TEXT("NoDataThreshold");
 
@@ -148,23 +131,19 @@ public:
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "EagleCloud|Debug")
     float CurrentUDSDensity = 1.f;
 
+    virtual void BeginPlay() override;
     virtual void Tick(float DeltaSeconds) override;
 
 private:
     /** Compute camera altitude in km above GroundReferenceZ. */
     double ComputeCameraAltitudeKm() const;
 
-    /** Write to MPC and/or directly to Feeder + MacroShell. */
+    /** Drive Feeder/MacroShell/MPC. */
     void ApplyBlend(float MacroAlpha, float UDSDensity, double AltitudeKm);
 
-    /** Toggle UDS Sky Mode (Volumetric <-> Space) based on altitude with hysteresis. */
+    /** Toggle UDS Sky Mode (Volumetric <-> Space) via Bridge with hysteresis. */
     void ApplySkyMode(double AltitudeKm);
 
-    /** Locate the Ultra_Dynamic_Sky actor in the level. */
-    AActor* FindUDSActor() const;
-
-    UPROPERTY(Transient) TWeakObjectPtr<AActor> CachedUDS;
-
-    /** Last sky mode we wrote to UDS. -1 = never written yet. */
+    /** Last sky mode index we wrote. -1 = never written yet. */
     int32 LastAppliedSkyMode = -1;
 };
