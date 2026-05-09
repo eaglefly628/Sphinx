@@ -137,9 +137,15 @@ UDS tick 内部:
 - 旧用 `BLEND_Opaque` → 全画布覆盖，painter cell 被擦
 - 新用 `BLEND_Additive` → Draw 累加到 RT，painter cell + NASA actor 共存
 
+**默认 Cloud Coverage 必须设 0**：
+- UDS `Cloud Coverage` 默认值（5 等）是**全局基准云量**，加在 painted RT 之上
+- 如果不为 0：天空一直被默认云填满 → NASA 的 `+B` 看不出差别
+- 设 0：默认无云 → NASA 数据直接渲染 → 出现实际地球云分布
+- 用户在 PIE 里实测：关掉默认 5 后，**天空看起来像一个地球**（NASA 真实云系可见）✅
+
 #### 代码层 TODO（下一步）
 
-- [ ] **P0**：用 RenderColor=(0,0,1,1) + Additive 跑，看天空是否出现 NASA 模式（应该是 NASA 亮处云厚、暗处不变 / 默认）
+- [x] **P0 ✅**：用 RenderColor=(0,0,1,1) + Additive 跑，天空出现 NASA 模式（用户截图确认 — 高频斑点感是因为全球图被压缩到 200km canvas，但分布是 NASA 实际数据）
 - [ ] **P1**：BP_EagleCloudBridge 改造 — Canvas Draw 到自有 `NASA_Coverage_RT_256`，spawn `BP_NASACloudPaintActor` 并把 RT 引用传过去（替代当前 GetUDSCloudRT 死路）
 - [ ] **P1**：实现 NASA 双通道编码 — 亮处加 B，暗处加 R（同时强制清空），需要 2 个 Draw pass 或 1 个材质
 - [ ] **P2**：`bUseWorldMapping = true` 模式实测，验证 TargetMapping 解码假设（相机移动时贴图应该"贴在世界上"）
