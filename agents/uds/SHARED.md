@@ -115,12 +115,34 @@ UDS tick 内部:
 - **风险 2**：`TargetMapping` 解码假设是 `(centerX, centerY, fullSize)`，从 cell BP 反解的（`Target Location = X + Z/2, Y + Z/2`）。默认 full-canvas 模式不依赖此假设，安全。
 - **测试路径**：编辑器编译 → 创建 BP_NASACloudPaintActor → spawn → 设 NASACoverageTexture → Play → 查 LogGIS_NASACloud + 看天空。
 
+#### 调试发现（实测）
+
+**P0 验证结果**（用户实际测试）：
+- ✅ Manager 自动发现：BP_NASACloudPaintActor 继承自 `UDS_Cloud_Paint_Container`（自带 `UDS_InterfaceActorArrayManagedActor` 接口），自动被 Cloud Paint Actors Manager 加进 FilteredAndSortedActors
+- ✅ UDS 调用接口：Print String 在 PIE 启动时 fire 一次，Success=true，证明整条 actor → interface → DrawToCloudPaintTarget 链路通的
+- ✅ Canvas Draw 落到正确的 RT：painter 之前画的 cell **被我们擦了**（Opaque + 全画布），证明我们写的就是 UDS 渲染采样的那张 `Cloud Coverage Render Target`
+
+**RT 通道编码**（UDS 9.3A 实测）：
+- **R 通道 = Zero Coverage** （强制无云 / 减云）
+- **G 通道 = Mid Coverage** （部分云）
+- **B 通道 = Full Coverage** （强制满云 / 加云）
+- 与 cell BP 的 `Full/Mid/Zero Coverage Present` 三个 bool 变量对应
+
+**测试方法**（验证通道）：RenderColor 改纯红 / 纯绿 / 纯蓝单独跑：
+- (1,0,0,1) → 云**变少**
+- (0,1,0,1) → 云**变多**
+- (0,0,1,1) → 云**全是**
+
+**BlendMode 选择**：
+- 旧用 `BLEND_Opaque` → 全画布覆盖，painter cell 被擦
+- 新用 `BLEND_Additive` → Draw 累加到 RT，painter cell + NASA actor 共存
+
 #### 代码层 TODO（下一步）
 
-- [ ] **P0**：编辑器测试 spawn → manager 发现 → Canvas Draw 触发，看天空是否出现 NASA 模式
-- [ ] **P1**：如 manager 不自动发现，加 `Activate` 触发逻辑（可能需要主程指示是 actor 自带还是 UDS 上的事件）
-- [ ] **P2**：`bUseWorldMapping = true` 模式实测，验证 TargetMapping 解码假设
-- [ ] **P3**：BP_EagleCloudBridge 改造 — Canvas Draw 到自有 `NASA_Coverage_RT`，spawn `BP_NASACloudPaintActor` 并把 RT 引用传过去（替代当前向 UDS RT 写的死路）
+- [ ] **P0**：用 RenderColor=(0,0,1,1) + Additive 跑，看天空是否出现 NASA 模式（应该是 NASA 亮处云厚、暗处不变 / 默认）
+- [ ] **P1**：BP_EagleCloudBridge 改造 — Canvas Draw 到自有 `NASA_Coverage_RT_256`，spawn `BP_NASACloudPaintActor` 并把 RT 引用传过去（替代当前 GetUDSCloudRT 死路）
+- [ ] **P1**：实现 NASA 双通道编码 — 亮处加 B，暗处加 R（同时强制清空），需要 2 个 Draw pass 或 1 个材质
+- [ ] **P2**：`bUseWorldMapping = true` 模式实测，验证 TargetMapping 解码假设（相机移动时贴图应该"贴在世界上"）
 - [ ] **P3**：可选 — 实现第二接口 `Apply Effect to Cloud Coverage Value`（按 3D 采样点逐点调整 coverage）
 
 ### [v1.4.0] — uds — 重构：BP Bridge 桥接模式（消除字符串反射）

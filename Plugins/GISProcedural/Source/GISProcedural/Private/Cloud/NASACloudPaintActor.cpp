@@ -124,7 +124,14 @@ bool ANASACloudPaintActor::DrawNASATextureToCanvas(
 	}
 
 	// UCanvas::K2_DrawTexture 等价于 BP "Draw Texture" 节点
-	// 选择 BLEND_Opaque 与 cell BP 行为对齐（直接覆盖 RT）
+	// BlendMode = Additive：避免 R/G/B 三个通道互相擦除
+	//   UDS painted cloud RT 通道编码（实测）：
+	//     R = Zero Coverage   (强制无云 / 减云)
+	//     G = Mid Coverage    (部分云)
+	//     B = Full Coverage   (强制满云 / 加云)
+	//   配合 RenderColor=(0,0,1,1) 走 B 通道：NASA 亮处加云，NASA 暗处不动
+	//   配合 RenderColor=(1,0,0,1) 走 R 通道：NASA 亮处清空，NASA 暗处不动
+	//   Additive 让多个 actor 的 Draw 累加，painter cell + NASA actor 共存不互相擦
 	Canvas->K2_DrawTexture(
 		NASATexture,
 		ScreenPosition,
@@ -132,7 +139,7 @@ bool ANASACloudPaintActor::DrawNASATextureToCanvas(
 		CoordinatePosition,
 		CoordinateSize,
 		InRenderColor,
-		EBlendMode::BLEND_Opaque,
+		EBlendMode::BLEND_Additive,
 		0.0f,                       // Rotation
 		FVector2D(0.5f, 0.5f)       // PivotPoint
 	);
