@@ -74,6 +74,55 @@ UDS 插件已入库（Git LFS），API 分析完成。集成代码待创建。
 
 ## Changelog
 
+### [v1.5.0-WIP] — uds — UDS Painted Cloud 接口直连（NASACloudPaintActor）
+
+#### 背景
+
+v1.4.0 BP Bridge 让 EagleCloud 不再用字符串反射，但**天上仍然没有 NASA 云**。深入诊断发现根因：UDS 9.3A 的 painted cloud 系统**不是 push 模式**（外部往一个 RT 写）而是**pull 模式**（UDS 每帧通过 `Cloud Paint Actors Manager` 主动调每个实现 `UDS_CloudPaintActor_Interface` 的 actor 的 `Draw to Cloud Paint Target` 函数）。我们之前 Canvas-Draw 的 `CloudPaintTarget` 不是 UDS 渲染采样源，真正的源是 `Cloud Coverage Render Target`，且每帧由 UDS 自己 BeginDraw → ForEach actor → EndDraw 重建。
+
+通过反向工程 `UDS_Ultra_Dynamic_Sky.UpdatePaintedCloudCoverageTarget` 函数 + `UDS_Cloud_Paint_Container.Draw to Cloud Paint Target` 函数（Ctrl+A→Ctrl+C 文本导出 + 节点级解码），完整管线确认：
+
+```
+UDS tick 内部:
+  Mapping = self.Cloud Coverage Target Mapping()    // Vector(centerX_world, centerY_world, fullSize_world) cm
+  BeginDrawCanvasToRenderTarget(Cloud Coverage Render Target) → Canvas
+  ForEach Cloud Paint Actors Manager.FilteredAndSortedActors:
+      actor.DrawToCloudPaintTarget(Canvas, RadialStormMID, Mapping, TargetRes, CanAdd, CanSub, Active)
+  EndDrawCanvasToRenderTarget
+```
+
+#### 架构变更
+
+新增 C++ 类 **`ANASACloudPaintActor`** (`Plugins/GISProcedural/Source/GISProcedural/Public/Cloud/`):
+- 继承 `AActor`，无 tick（UDS 主动调）
+- 核心 UFUNCTION: `DrawNASAToCanvas(Canvas, TargetMapping, TargetRes, CanAdd, CanSub, Active) → bool`
+  - 完全对齐接口签名
+  - 默认 full-canvas 铺满模式（最快、最简单，相机移动时贴图跟相机走）
+  - `bUseWorldMapping = true` 走世界对齐模式（按 `TargetMapping = (centerX, centerY, fullSize)` 公式做 UV 偏移/缩放）
+- UPROPERTY: `NASACoverageTexture` / `NASAWorldCenter` / `NASAWorldSize` / `RenderColor` / `bEnabled` / `PaintPriority`
+- BlendMode = Opaque（与 cell BP 行为对齐）
+
+#### BP 子类（用户在编辑器创建）
+
+`BP_NASACloudPaintActor`（无 .uasset 提交，CLI 不能创建）：
+- Parent Class = `ANASACloudPaintActor`
+- Class Settings → Implemented Interfaces → `UDS_CloudPaintActor_Interface`
+- Override `Draw to Cloud Paint Target` → 函数体一个节点：调 `self.DrawNASAToCanvas(...)` 传入所有同名参数
+
+#### 测试 / 风险
+
+- **风险 1**：`Cloud Paint Actors Manager` (UDS_InterfaceActorArrayManager) 是否能自动发现我们的 actor 未验证。如果不发现，需要在 spawn 后主动调 `Activate` 事件触发 manager 的 Filter And Sort Array 重扫描。
+- **风险 2**：`TargetMapping` 解码假设是 `(centerX, centerY, fullSize)`，从 cell BP 反解的（`Target Location = X + Z/2, Y + Z/2`）。默认 full-canvas 模式不依赖此假设，安全。
+- **测试路径**：编辑器编译 → 创建 BP_NASACloudPaintActor → spawn → 设 NASACoverageTexture → Play → 查 LogGIS_NASACloud + 看天空。
+
+#### 代码层 TODO（下一步）
+
+- [ ] **P0**：编辑器测试 spawn → manager 发现 → Canvas Draw 触发，看天空是否出现 NASA 模式
+- [ ] **P1**：如 manager 不自动发现，加 `Activate` 触发逻辑（可能需要主程指示是 actor 自带还是 UDS 上的事件）
+- [ ] **P2**：`bUseWorldMapping = true` 模式实测，验证 TargetMapping 解码假设
+- [ ] **P3**：BP_EagleCloudBridge 改造 — Canvas Draw 到自有 `NASA_Coverage_RT`，spawn `BP_NASACloudPaintActor` 并把 RT 引用传过去（替代当前向 UDS RT 写的死路）
+- [ ] **P3**：可选 — 实现第二接口 `Apply Effect to Cloud Coverage Value`（按 3D 采样点逐点调整 coverage）
+
 ### [v1.4.0] — uds — 重构：BP Bridge 桥接模式（消除字符串反射）
 
 #### 背景
