@@ -102,6 +102,28 @@ public:
 		bool bCanSubtractCoverage,
 		bool bCloudPaintingActive);
 
+	/**
+	 * 静态版本：从任何 BP 调用，不需要 actor 实例。
+	 *
+	 * 用途：当 BP 子类继承自 UDS_Cloud_Paint_Container（绕开 Add Interface picker bug 的方案 B）时，
+	 * 在 override 的 "Draw to Cloud Paint Target" 函数体内调用本函数。
+	 * 所有原本是 UPROPERTY 的属性这里作为 input 参数传入（在 BP 子类用 BP variables 持有）。
+	 *
+	 * 与实例版本 DrawNASAToCanvas 行为完全一致，只是参数化了内部状态。
+	 */
+	UFUNCTION(BlueprintCallable, Category = "NASA Cloud",
+		meta = (DisplayName = "Draw NASA Texture To Canvas (Static)"))
+	static bool DrawNASATextureToCanvas(
+		UCanvas* Canvas,
+		UTexture* NASATexture,
+		FVector TargetMapping,
+		int32 TargetRes,
+		FVector2D InNASAWorldCenter,
+		float InNASAWorldSize,
+		bool bInUseWorldMapping,
+		FLinearColor InRenderColor,
+		bool bCloudPaintingActive);
+
 protected:
 	virtual void BeginPlay() override;
 };

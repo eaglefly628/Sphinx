@@ -46,11 +46,39 @@ bool ANASACloudPaintActor::DrawNASAToCanvas(
 	bool bCanSubtractCoverage,
 	bool bCloudPaintingActive)
 {
-	if (!bEnabled || !bCloudPaintingActive)
+	if (!bEnabled)
 	{
 		return false;
 	}
-	if (!Canvas || !NASACoverageTexture || TargetRes <= 0)
+	// 转调 static 实现，把实例 UPROPERTY 当参数传进去
+	return DrawNASATextureToCanvas(
+		Canvas,
+		NASACoverageTexture,
+		TargetMapping,
+		TargetRes,
+		NASAWorldCenter,
+		NASAWorldSize,
+		bUseWorldMapping,
+		RenderColor,
+		bCloudPaintingActive);
+}
+
+bool ANASACloudPaintActor::DrawNASATextureToCanvas(
+	UCanvas* Canvas,
+	UTexture* NASATexture,
+	FVector TargetMapping,
+	int32 TargetRes,
+	FVector2D InNASAWorldCenter,
+	float InNASAWorldSize,
+	bool bInUseWorldMapping,
+	FLinearColor InRenderColor,
+	bool bCloudPaintingActive)
+{
+	if (!bCloudPaintingActive)
+	{
+		return false;
+	}
+	if (!Canvas || !NASATexture || TargetRes <= 0)
 	{
 		return false;
 	}
@@ -61,7 +89,7 @@ bool ANASACloudPaintActor::DrawNASAToCanvas(
 	FVector2D CoordinatePosition(0.0f, 0.0f);
 	FVector2D CoordinateSize(1.0f, 1.0f);
 
-	if (bUseWorldMapping && NASAWorldSize > KINDA_SMALL_NUMBER)
+	if (bInUseWorldMapping && InNASAWorldSize > KINDA_SMALL_NUMBER)
 	{
 		// === 世界对齐绘制 ===
 		// 解码 TargetMapping = (CenterX, CenterY, FullSize) 单位 cm
@@ -83,9 +111,9 @@ bool ANASACloudPaintActor::DrawNASAToCanvas(
 			const FVector2D MappingCenter(static_cast<float>(TargetMapping.X), static_cast<float>(TargetMapping.Y));
 			const FVector2D MappingTopLeft = MappingCenter - FVector2D(MappingSize, MappingSize) * 0.5f;
 
-			const FVector2D NASATopLeft = NASAWorldCenter - FVector2D(NASAWorldSize, NASAWorldSize) * 0.5f;
+			const FVector2D NASATopLeft = InNASAWorldCenter - FVector2D(InNASAWorldSize, InNASAWorldSize) * 0.5f;
 			ScreenPosition = (NASATopLeft - MappingTopLeft) * PixelsPerWorld;
-			ScreenSize = FVector2D(NASAWorldSize, NASAWorldSize) * PixelsPerWorld;
+			ScreenSize = FVector2D(InNASAWorldSize, InNASAWorldSize) * PixelsPerWorld;
 		}
 	}
 	else
@@ -98,12 +126,12 @@ bool ANASACloudPaintActor::DrawNASAToCanvas(
 	// UCanvas::K2_DrawTexture 等价于 BP "Draw Texture" 节点
 	// 选择 BLEND_Opaque 与 cell BP 行为对齐（直接覆盖 RT）
 	Canvas->K2_DrawTexture(
-		NASACoverageTexture,
+		NASATexture,
 		ScreenPosition,
 		ScreenSize,
 		CoordinatePosition,
 		CoordinateSize,
-		RenderColor,
+		InRenderColor,
 		EBlendMode::BLEND_Opaque,
 		0.0f,                       // Rotation
 		FVector2D(0.5f, 0.5f)       // PivotPoint
