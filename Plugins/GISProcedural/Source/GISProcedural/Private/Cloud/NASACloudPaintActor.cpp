@@ -2,6 +2,7 @@
 #include "Cloud/NASACloudPaintActor.h"
 
 #include "Engine/Canvas.h"
+#include "Engine/Engine.h"
 #include "Engine/Texture.h"
 #include "Logging/LogMacros.h"
 
@@ -143,6 +144,24 @@ bool ANASACloudPaintActor::DrawNASATextureToCanvas(
 		0.0f,                       // Rotation
 		FVector2D(0.5f, 0.5f)       // PivotPoint
 	);
+
+	// On-screen debug — 看 UDS 给我们的 mapping 参数 + 我们计算出的 canvas 坐标
+	if (GEngine)
+	{
+		const FString Msg = FString::Printf(
+			TEXT("[NASA] Map=(%.0f,%.0f,%.0f) Res=%d UseWorldMap=%s  ScreenPos=(%.1f,%.1f) ScreenSize=(%.1f,%.1f)  Color=(%.2f,%.2f,%.2f,%.2f)"),
+			TargetMapping.X, TargetMapping.Y, TargetMapping.Z,
+			TargetRes,
+			bInUseWorldMapping ? TEXT("true") : TEXT("false"),
+			ScreenPosition.X, ScreenPosition.Y,
+			ScreenSize.X, ScreenSize.Y,
+			InRenderColor.R, InRenderColor.G, InRenderColor.B, InRenderColor.A);
+		GEngine->AddOnScreenDebugMessage(
+			/*Key=*/ static_cast<uint64>(102),
+			/*Time=*/ 1.5f,
+			FColor::Yellow,
+			Msg);
+	}
 
 	return true;
 }
