@@ -75,12 +75,36 @@ bool ANASACloudPaintActor::DrawNASATextureToCanvas(
 	FLinearColor InRenderColor,
 	bool bCloudPaintingActive)
 {
+	// === 入口 log：UDS 调到了就刷 ===
+	UE_LOG(LogGIS_NASACloud, Log,
+		TEXT("DrawNASATextureToCanvas: bActive=%d Canvas=%s NASATex=%s TargetRes=%d Map=(%.0f,%.0f,%.0f)"),
+		bCloudPaintingActive ? 1 : 0,
+		Canvas ? TEXT("ok") : TEXT("null"),
+		NASATexture ? *NASATexture->GetName() : TEXT("null"),
+		TargetRes,
+		TargetMapping.X, TargetMapping.Y, TargetMapping.Z);
+
+	if (GEngine)
+	{
+		const FString EntryMsg = FString::Printf(
+			TEXT("[NASA-IN] Active=%d Canvas=%s Tex=%s Res=%d"),
+			bCloudPaintingActive ? 1 : 0,
+			Canvas ? TEXT("ok") : TEXT("null"),
+			NASATexture ? *NASATexture->GetName() : TEXT("null"),
+			TargetRes);
+		GEngine->AddOnScreenDebugMessage(static_cast<uint64>(103), 1.5f, FColor::Orange, EntryMsg);
+	}
+
 	if (!bCloudPaintingActive)
 	{
+		UE_LOG(LogGIS_NASACloud, Warning, TEXT("  EARLY EXIT: bCloudPaintingActive=false"));
+		if (GEngine) GEngine->AddOnScreenDebugMessage(static_cast<uint64>(104), 1.5f, FColor::Red, TEXT("[NASA-OUT] PaintingActive=false"));
 		return false;
 	}
 	if (!Canvas || !NASATexture || TargetRes <= 0)
 	{
+		UE_LOG(LogGIS_NASACloud, Warning, TEXT("  EARLY EXIT: Canvas/NASATex/TargetRes invalid"));
+		if (GEngine) GEngine->AddOnScreenDebugMessage(static_cast<uint64>(104), 1.5f, FColor::Red, TEXT("[NASA-OUT] Canvas/Tex/Res invalid"));
 		return false;
 	}
 
