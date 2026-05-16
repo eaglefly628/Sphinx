@@ -146,6 +146,11 @@ UDS tick 内部:
 #### 代码层 TODO（下一步）
 
 - [x] **P0 ✅**：用 RenderColor=(0,0,1,1) + Additive 跑，天空出现 NASA 模式（用户截图确认 — 高频斑点感是因为全球图被压缩到 200km canvas，但分布是 NASA 实际数据）
+- [x] **P1 ✅ 架构重构**：Feeder 加 `OwnedRT` UPROPERTY（自有 RT），不再强制写 UDS 内部 RT，破除"最后写入者赢"。`ApplyToUDS` 优先用 OwnedRT，OwnedRT 为空时回退到 Bridge.GetUDSCloudRT()（legacy 兼容）。**用户需在编辑器创建 RT 资产 + 赋值 + 把 BP_NASACloudPaintActor.SourceTexture 指向同一 RT** 才完成迁移。
+- [x] **P1 ✅ 文档归档**：`docs/UDS_PaintedCloud_Integration.md` 综合文档（背景/架构/编辑器步骤/配置/常见问题/文件清单），供同事新工程迁移用。
+- [ ] **P2**：实际加一个 LightningPaintActor / StormFrontPaintActor 验证多源 Additive 合成正确性
+- [ ] **P2**：Cesium georef 集成 — 相机经纬度精确换算（当前用 OriginLat/OriginLon 平面近似，200km 内可接受）
+- [ ] **P3**：`Apply Effect to Cloud Coverage Value` 接口实现（按 3D 采样点逐点调）
 - [ ] **P1**：BP_EagleCloudBridge 改造 — Canvas Draw 到自有 `NASA_Coverage_RT_256`，spawn `BP_NASACloudPaintActor` 并把 RT 引用传过去（替代当前 GetUDSCloudRT 死路）
 - [ ] **P1**：实现 NASA 双通道编码 — 亮处加 B，暗处加 R（同时强制清空），需要 2 个 Draw pass 或 1 个材质
 - [ ] **P2**：`bUseWorldMapping = true` 模式实测，验证 TargetMapping 解码假设（相机移动时贴图应该"贴在世界上"）
