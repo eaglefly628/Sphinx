@@ -106,35 +106,19 @@ bool ASatelliteCloudFeeder::ApplyToUDS()
     // Push painted-cloud parameters via the bridge (4 UDS variables in one call).
     Bridge->SetPaintingState(true, true, PaintedOpacity, AffectsGlobalValues);
 
-    // Prefer self-owned RT (v1.5.0+). Fall back to Bridge.GetUDSCloudRT() for
-    // backward compat / migration. Self-owned RT enables multi-actor compositing:
-    // downstream BP_NASACloudPaintActor reads it and feeds UDS Canvas via
-    // UDS_CloudPaintActor_Interface ForEach loop (other sources like lightning
-    // can also contribute without overwriting each other).
-    UTextureRenderTarget2D* RT = OwnedRT.Get();
-    const bool bUsingLegacyPath = (RT == nullptr);
-    if (bUsingLegacyPath)
-    {
-        RT = Bridge->GetUDSCloudRT();
-        if (RT && bVerboseLogging)
-        {
-            UE_LOG(LogEagleCloud, Warning,
-                   TEXT("ApplyToUDS: OwnedRT not set, falling back to Bridge.GetUDSCloudRT(). ")
-                   TEXT("Legacy path writes UDS internal RT directly, breaks multi-actor compositing. ")
-                   TEXT("Create a TextureRenderTarget2D asset and assign to Feeder.OwnedRT."));
-        }
-    }
+    // Get UDS's painted-coverage RT via the bridge.
+    UTextureRenderTarget2D* RT = Bridge->GetUDSCloudRT();
     if (!RT)
     {
         UE_LOG(LogEagleCloud, Warning,
-               TEXT("ApplyToUDS: both OwnedRT and Bridge.GetUDSCloudRT() returned null."));
+               TEXT("ApplyToUDS: Bridge.GetUDSCloudRT() returned null. ")
+               TEXT("Check BP_EagleCloudBridge.GetUDSCloudRT implementation."));
         return false;
     }
     if (bVerboseLogging)
     {
-        UE_LOG(LogEagleCloud, Log, TEXT("  RT: %s (%dx%d) [%s]  source: %s (%dx%d)"),
+        UE_LOG(LogEagleCloud, Log, TEXT("  RT: %s (%dx%d)  source: %s (%dx%d)"),
                *RT->GetName(), RT->SizeX, RT->SizeY,
-               bUsingLegacyPath ? TEXT("legacy/Bridge") : TEXT("OwnedRT"),
                *SourceTex->GetName(), SourceTex->GetSizeX(), SourceTex->GetSizeY());
     }
 
