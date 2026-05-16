@@ -75,67 +75,12 @@ bool ANASACloudPaintActor::DrawNASATextureToCanvas(
 	FLinearColor InRenderColor,
 	bool bCloudPaintingActive)
 {
-	// === 入口 log: 任何时候这个函数被调用都看得到 ===
-	UE_LOG(LogGIS_NASACloud, Log,
-		TEXT("DrawNASATextureToCanvas ENTRY: bActive=%d NASATex=%s Canvas=%s TargetRes=%d"),
-		bCloudPaintingActive ? 1 : 0,
-		NASATexture ? *NASATexture->GetName() : TEXT("(null)"),
-		Canvas ? TEXT("ok") : TEXT("(null)"),
-		TargetRes);
-
-	if (GEngine)
-	{
-		const FString EntryMsg = FString::Printf(
-			TEXT("[NASA-ENTRY] Active=%d Tex=%s Canvas=%s Res=%d"),
-			bCloudPaintingActive ? 1 : 0,
-			NASATexture ? *NASATexture->GetName() : TEXT("null"),
-			Canvas ? TEXT("ok") : TEXT("null"),
-			TargetRes);
-		GEngine->AddOnScreenDebugMessage(
-			/*Key=*/ static_cast<uint64>(103),
-			/*Time=*/ 2.0f,
-			FColor::Orange,
-			EntryMsg);
-	}
-
 	if (!bCloudPaintingActive)
 	{
-		UE_LOG(LogGIS_NASACloud, Warning, TEXT("  EARLY EXIT: bCloudPaintingActive=false"));
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(static_cast<uint64>(104), 2.0f, FColor::Red,
-				TEXT("[NASA-EXIT] bCloudPaintingActive=false"));
-		}
 		return false;
 	}
-	if (!Canvas)
+	if (!Canvas || !NASATexture || TargetRes <= 0)
 	{
-		UE_LOG(LogGIS_NASACloud, Warning, TEXT("  EARLY EXIT: Canvas is null"));
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(static_cast<uint64>(104), 2.0f, FColor::Red,
-				TEXT("[NASA-EXIT] Canvas null"));
-		}
-		return false;
-	}
-	if (!NASATexture)
-	{
-		UE_LOG(LogGIS_NASACloud, Warning, TEXT("  EARLY EXIT: NASATexture is null"));
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(static_cast<uint64>(104), 2.0f, FColor::Red,
-				TEXT("[NASA-EXIT] NASATexture null"));
-		}
-		return false;
-	}
-	if (TargetRes <= 0)
-	{
-		UE_LOG(LogGIS_NASACloud, Warning, TEXT("  EARLY EXIT: TargetRes=%d <= 0"), TargetRes);
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(static_cast<uint64>(104), 2.0f, FColor::Red,
-				FString::Printf(TEXT("[NASA-EXIT] TargetRes=%d"), TargetRes));
-		}
 		return false;
 	}
 
