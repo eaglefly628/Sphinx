@@ -50,6 +50,24 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|Bridge")
     TObjectPtr<AEagleCloudUDSBridge> Bridge = nullptr;
 
+    /**
+     * Self-owned destination RT (preferred since v1.5.0).
+     *
+     * Feeder writes the NASA local window into this RT. A downstream actor
+     * implementing UDS_CloudPaintActor_Interface (e.g. BP_NASACloudPaintActor)
+     * reads this RT and contributes to UDS Cloud Coverage Render Target via
+     * the proper pull-mode interface — letting multiple data sources
+     * (NASA / lightning / storm front / ...) coexist via UDS ForEach loop.
+     *
+     * If NULL: falls back to Bridge.GetUDSCloudRT() (legacy path; writes
+     * directly into UDS internal RT, breaks multi-actor compositing).
+     *
+     * Recommended: create a TextureRenderTarget2D asset
+     * (e.g. RT_NASA_LocalWindow_256, RGBA8, 256x256) and assign here.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|Bridge")
+    TObjectPtr<UTextureRenderTarget2D> OwnedRT = nullptr;
+
     // ---------- Local mode (Phase A) ----------
 
     /** Local cloud cover texture (Phase A). Draws 1:1 into UDS RT. */
