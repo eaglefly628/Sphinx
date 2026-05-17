@@ -12,6 +12,7 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Materials/MaterialParameterCollection.h"
 #include "Kismet/KismetMaterialLibrary.h"
+#include "Components/SkyAtmosphereComponent.h"
 
 AAtmosphereCloudManager::AAtmosphereCloudManager()
 {
@@ -38,7 +39,8 @@ void AAtmosphereCloudManager::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
 
-    CurrentAltitudeKm = ComputeCameraAltitudeKm();
+    const FVector CameraLoc = GetCameraWorldLocation();
+    CurrentAltitudeKm = (CameraLoc.Z - GroundReferenceZ) * 0.00001;  // cm -> km
 
     // Compute blend factor T in [0,1] across the transition band
     float T = 0.f;
@@ -67,18 +69,23 @@ void AAtmosphereCloudManager::Tick(float DeltaSeconds)
 
     ApplyBlend(MacroAlpha, UDSDensity, CurrentAltitudeKm);
     ApplySkyMode(CurrentAltitudeKm);
+    ApplyAtmosphereMode(CurrentAltitudeKm, CameraLoc);
+}
+
+FVector AAtmosphereCloudManager::GetCameraWorldLocation() const
+{
+    UWorld* World = GetWorld();
+    if (!World) return FVector::ZeroVector;
+
+    APlayerController* PC = World->GetFirstPlayerController();
+    if (!PC || !PC->PlayerCameraManager) return FVector::ZeroVector;
+
+    return PC->PlayerCameraManager->GetCameraLocation();  // cm
 }
 
 double AAtmosphereCloudManager::ComputeCameraAltitudeKm() const
 {
-    UWorld* World = GetWorld();
-    if (!World) return 0.0;
-
-    APlayerController* PC = World->GetFirstPlayerController();
-    if (!PC || !PC->PlayerCameraManager) return 0.0;
-
-    const double CamZ = PC->PlayerCameraManager->GetCameraLocation().Z;  // cm
-    return (CamZ - GroundReferenceZ) * 0.00001;  // cm -> km
+    return (GetCameraWorldLocation().Z - GroundReferenceZ) * 0.00001;  // cm -> km
 }
 
 void AAtmosphereCloudManager::ApplyBlend(float MacroAlpha, float UDSDensity, double AltitudeKm)
@@ -151,4 +158,64 @@ void AAtmosphereCloudManager::ApplySkyMode(double AltitudeKm)
            TEXT("UDS Sky Mode -> %d at altitude %.1f km (%s)"),
            DesiredMode, AltitudeKm,
            DesiredMode == SpaceMode ? TEXT("Space") : TEXT("Volumetric"));
+}
+
+void AAtmosphereCloudManager::ApplyAtmosphereMode(double AltitudeKm, const FVector& CameraLoc)
+{
+    if (!bManageAtmosphereSwitch) return;
+
+    // 用 SkyMode hysteresis 复用 — 切换点相同（atmosphere 跟 SkyMode 同步切）
+    int32 DesiredMode = LastAppliedAtmosphereMode;
+    if (AltitudeKm >= HighAltitudeKm + SkyModeSwitchHysteresisKm)
+    {
+        DesiredMode = 1;  // Cesium
+    }
+    else if (AltitudeKm <= HighAltitudeKm - SkyModeSwitchHysteresisKm)
+    {
+        DesiredMode = 0;  // UDS
+    }
+    else if (LastAppliedAtmosphereMode == -1)
+    {
+        DesiredMode = (AltitudeKm >= HighAltitudeKm) ? 1 : 0;
+    }
+
+    const bool bUseUDS = (DesiredMode == 0);
+
+    // === UDS atmosphere 跟相机（关键：再次激活时位置不会留在老平面）===
+    // 即使 mode 没变，每 tick 都同步位置，确保 atmosphere 永远以相机为中心。
+    if (bMakeUDSFollowCamera && bUseUDS && UDSActorWithSkyAtmosphere)
+    {
+        UDSActorWithSkyAtmosphere->SetActorLocation(CameraLoc, /*bSweep=*/false);
+    }
+
+    // === Mode 切换（visibility toggle）===
+    if (DesiredMode == LastAppliedAtmosphereMode) return;
+
+    if (UDSActorWithSkyAtmosphere)
+    {
+        if (USkyAtmosphereComponent* SkyAtmos =
+            UDSActorWithSkyAtmosphere->FindComponentByClass<USkyAtmosphereComponent>())
+        {
+            SkyAtmos->SetVisibility(bUseUDS, /*bPropagateToChildren=*/true);
+        }
+    }
+
+    if (CesiumSunSkyActor)
+    {
+        CesiumSunSkyActor->SetActorHiddenInGame(bUseUDS);
+        CesiumSunSkyActor->SetActorEnableCollision(!bUseUDS);
+    }
+
+    // 切回 UDS 时重置 painting state + coverage window —— 避免 Space 期间状态丢失
+    if (bUseUDS && Bridge && Feeder)
+    {
+        Bridge->SetPaintingState(true, true, Feeder->PaintedOpacity, Feeder->AffectsGlobalValues);
+        Bridge->SetCoverageWindow(FVector2D(CameraLoc.X, CameraLoc.Y));
+    }
+
+    UE_LOG(LogEagleCloud, Log,
+           TEXT("Atmosphere mode -> %s at altitude %.1f km"),
+           bUseUDS ? TEXT("UDS (snap to camera)") : TEXT("Cesium"), AltitudeKm);
+
+    LastAppliedAtmosphereMode = DesiredMode;
 }

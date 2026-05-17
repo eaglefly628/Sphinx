@@ -98,6 +98,38 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|SkyMode", meta = (ClampMin = "0"))
     double SkyModeSwitchHysteresisKm = 25.0;
 
+    // ---------- Atmosphere switch (UDS SkyAtmosphere vs Cesium SunSky) ----------
+
+    /**
+     * Actor that owns the UDS SkyAtmosphere component (typically Ultra_Dynamic_Sky).
+     * Manager toggles this component's visibility based on altitude:
+     * low altitude → UDS atmosphere visible, high altitude → hidden.
+     * Also (if bMakeUDSFollowCamera) snaps this actor to camera each tick so
+     * UDS's flat-earth atmosphere stays centered on the viewer.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|Atmosphere")
+    TObjectPtr<AActor> UDSActorWithSkyAtmosphere = nullptr;
+
+    /**
+     * Cesium's own atmosphere actor (CesiumSunSky / similar). Toggled inverse to UDS:
+     * high altitude → visible (Cesium takes over), low altitude → hidden.
+     * Leave null if your project doesn't use Cesium's atmosphere.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|Atmosphere")
+    TObjectPtr<AActor> CesiumSunSkyActor = nullptr;
+
+    /** Automatically switch UDS↔Cesium atmosphere based on altitude. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|Atmosphere")
+    bool bManageAtmosphereSwitch = true;
+
+    /**
+     * Snap UDSActorWithSkyAtmosphere to camera location each tick (while UDS active).
+     * UDS atmosphere is flat-earth design — without following camera, after re-activation
+     * the atmosphere stays at its old world position and looks offset from Cesium Earth.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|Atmosphere")
+    bool bMakeUDSFollowCamera = true;
+
     // ---------- Geo (matches feeder for ground reference) ----------
 
     /**
@@ -135,6 +167,9 @@ public:
     virtual void Tick(float DeltaSeconds) override;
 
 private:
+    /** Compute camera world location (cm). */
+    FVector GetCameraWorldLocation() const;
+
     /** Compute camera altitude in km above GroundReferenceZ. */
     double ComputeCameraAltitudeKm() const;
 
@@ -144,6 +179,12 @@ private:
     /** Toggle UDS Sky Mode (Volumetric <-> Space) via Bridge with hysteresis. */
     void ApplySkyMode(double AltitudeKm);
 
+    /** Toggle UDS SkyAtmosphere component vs CesiumSunSky actor based on altitude. */
+    void ApplyAtmosphereMode(double AltitudeKm, const FVector& CameraLoc);
+
     /** Last sky mode index we wrote. -1 = never written yet. */
     int32 LastAppliedSkyMode = -1;
+
+    /** Last atmosphere mode: 0 = UDS, 1 = Cesium, -1 = uninitialized. */
+    int32 LastAppliedAtmosphereMode = -1;
 };
