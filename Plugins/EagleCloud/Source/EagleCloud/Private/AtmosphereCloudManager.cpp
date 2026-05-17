@@ -14,7 +14,6 @@
 #include "Kismet/KismetMaterialLibrary.h"
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
-#include "Components/VolumetricCloudComponent.h"
 
 AAtmosphereCloudManager::AAtmosphereCloudManager()
 {
@@ -220,12 +219,9 @@ void AAtmosphereCloudManager::ApplyAtmosphereMode(double AltitudeKm, const FVect
             UE_LOG(LogEagleCloud, Log, TEXT("  ExponentialHeightFog: visibility set to %d"), bUseUDS ? 1 : 0);
         }
 
-        if (UVolumetricCloudComponent* VC =
-            UDSActorWithSkyAtmosphere->FindComponentByClass<UVolumetricCloudComponent>())
-        {
-            VC->SetVisibility(bUseUDS, true);
-            UE_LOG(LogEagleCloud, Log, TEXT("  VolumetricCloud: visibility set to %d"), bUseUDS ? 1 : 0);
-        }
+        // 注意: VolumetricCloud component 不 toggle —— UDS 用 Sky Mode (我们已经
+        // 通过 Bridge.SetSkyMode 切 Space/Volumetric) 来管 cloud 渲染. 这里再 toggle
+        // VolumetricCloud component 会跟 UDS 自身控制冲突, 导致云消失.
 
         // === Snap UDS XY to camera (only on transition into UDS), Z 锁定 GroundReferenceZ ===
         if (bUseUDS && bSnapUDSToCameraOnReactivation)
