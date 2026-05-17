@@ -14,6 +14,7 @@
 #include "Kismet/KismetMaterialLibrary.h"
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
+#include "Components/StaticMeshComponent.h"
 
 AAtmosphereCloudManager::AAtmosphereCloudManager()
 {
@@ -201,6 +202,16 @@ void AAtmosphereCloudManager::ApplyAtmosphereMode(double AltitudeKm, const FVect
         if (USkyAtmosphereComponent* SkyAtmos =
             UDSActorWithSkyAtmosphere->FindComponentByClass<USkyAtmosphereComponent>())
         {
+            // 强制 TransformMode = PlanetTopAtComponentTransform
+            // 这样 SetActorLocation 后 atmosphere 真的跟 actor 走 (planet top 在 actor 位置)
+            // 默认 PlanetTopAtAbsoluteWorldOrigin 永远在 (0,0,0) — 我们 snap 了 actor 也无效
+            if (SkyAtmos->TransformMode != ESkyAtmosphereTransformMode::PlanetTopAtComponentTransform)
+            {
+                SkyAtmos->TransformMode = ESkyAtmosphereTransformMode::PlanetTopAtComponentTransform;
+                SkyAtmos->MarkRenderStateDirty();
+                UE_LOG(LogEagleCloud, Log, TEXT("  SkyAtmosphere TransformMode -> PlanetTopAtComponentTransform"));
+            }
+
             const bool bWasVisible = SkyAtmos->IsVisible();
             SkyAtmos->SetVisibility(bUseUDS, true);
             UE_LOG(LogEagleCloud, Log, TEXT("  SkyAtmosphere: visible %d -> %d (set to %d, now %d)"),
@@ -217,6 +228,20 @@ void AAtmosphereCloudManager::ApplyAtmosphereMode(double AltitudeKm, const FVect
         {
             Fog->SetVisibility(bUseUDS, true);
             UE_LOG(LogEagleCloud, Log, TEXT("  ExponentialHeightFog: visibility set to %d"), bUseUDS ? 1 : 0);
+        }
+
+        // === Toggle 所有 StaticMeshComponent on UDS ===
+        // UDS 内部用 Sky_Sphere / Space Nebula Sphere / Global Volumetric Fog Mesh /
+        // Inside Cloud Fog Mesh 等静态 mesh 渲染天空穹顶/星云/雾. 从外面看是切面/球壳边缘.
+        // SkyAtmosphere hide 不影响这些, 必须单独 toggle.
+        TArray<UStaticMeshComponent*> StaticMeshes;
+        UDSActorWithSkyAtmosphere->GetComponents<UStaticMeshComponent>(StaticMeshes);
+        for (UStaticMeshComponent* SM : StaticMeshes)
+        {
+            if (!SM) continue;
+            SM->SetVisibility(bUseUDS, true);
+            UE_LOG(LogEagleCloud, Log, TEXT("  StaticMesh '%s' visibility set to %d"),
+                   *SM->GetName(), bUseUDS ? 1 : 0);
         }
 
         // 注意: VolumetricCloud component 不 toggle —— UDS 用 Sky Mode (我们已经
