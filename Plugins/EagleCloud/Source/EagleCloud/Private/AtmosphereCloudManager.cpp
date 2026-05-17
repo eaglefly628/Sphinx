@@ -13,8 +13,6 @@
 #include "Materials/MaterialParameterCollection.h"
 #include "Kismet/KismetMaterialLibrary.h"
 #include "Components/SkyAtmosphereComponent.h"
-#include "Components/ExponentialHeightFogComponent.h"
-#include "Components/StaticMeshComponent.h"
 
 AAtmosphereCloudManager::AAtmosphereCloudManager()
 {
@@ -190,65 +188,43 @@ void AAtmosphereCloudManager::ApplyAtmosphereMode(double AltitudeKm, const FVect
            bUseUDS ? TEXT("true") : TEXT("false"),
            AltitudeKm, CameraLoc.X, CameraLoc.Y, CameraLoc.Z);
 
-    // === Multi-component hide: SkyAtmosphere + ExponentialHeightFog + VolumetricCloud ===
-    // UDS 不只是 SkyAtmosphere，还可能挂 ExponentialHeightFog（看起来像切面）和
-    // VolumetricCloud。要彻底"消失"需要全 hide。
+    // === Visibility toggle: 用 UDS 自家 HideSky 函数 (Bridge.HideSky) ===
+    // UDS 内部知道该 hide 哪些 component — 不用我们手动 toggle StaticMesh/SkyAtmosphere/Fog,
+    // 避免跟 UDS BP tick 打架. 高空 hide fog+atmosphere+sky_sphere/clouds, 保留 lights.
+    if (Bridge)
+    {
+        Bridge->HideSky(
+            /*bHideEntireActor=*/    false,     // 保留 actor 本身 (sun 需要)
+            /*bHideLights=*/         false,     // 保留 sun/moon 光照 (Cesium Earth 需要)
+            /*bHideFogAtmosphere=*/  !bUseUDS,  // 高空 hide atmosphere (Cesium 接管)
+            /*bHideSkySphereClouds=*/ !bUseUDS, // 高空 hide sky dome + cloud mesh (切面来源)
+            /*bHidePostProcessing=*/ false      // 保留 post processing
+        );
+        UE_LOG(LogEagleCloud, Log, TEXT("  Bridge.HideSky(actor=0, lights=0, fog/atmos=%d, sky/clouds=%d, post=0)"),
+               !bUseUDS ? 1 : 0, !bUseUDS ? 1 : 0);
+    }
+    else
+    {
+        UE_LOG(LogEagleCloud, Warning, TEXT("  Bridge is null, HideSky skipped"));
+    }
+
     if (UDSActorWithSkyAtmosphere)
     {
-        const FVector OldLoc = UDSActorWithSkyAtmosphere->GetActorLocation();
-        UE_LOG(LogEagleCloud, Log, TEXT("  UDS actor BEFORE: location=(%.0f,%.0f,%.0f)"),
-               OldLoc.X, OldLoc.Y, OldLoc.Z);
-
+        // SkyAtmosphere TransformMode 修正 (一次性, snap 后 atmosphere 才真的跟 actor 走)
         if (USkyAtmosphereComponent* SkyAtmos =
             UDSActorWithSkyAtmosphere->FindComponentByClass<USkyAtmosphereComponent>())
         {
-            // 强制 TransformMode = PlanetTopAtComponentTransform
-            // 这样 SetActorLocation 后 atmosphere 真的跟 actor 走 (planet top 在 actor 位置)
-            // 默认 PlanetTopAtAbsoluteWorldOrigin 永远在 (0,0,0) — 我们 snap 了 actor 也无效
             if (SkyAtmos->TransformMode != ESkyAtmosphereTransformMode::PlanetTopAtComponentTransform)
             {
                 SkyAtmos->TransformMode = ESkyAtmosphereTransformMode::PlanetTopAtComponentTransform;
                 SkyAtmos->MarkRenderStateDirty();
                 UE_LOG(LogEagleCloud, Log, TEXT("  SkyAtmosphere TransformMode -> PlanetTopAtComponentTransform"));
             }
-
-            const bool bWasVisible = SkyAtmos->IsVisible();
-            SkyAtmos->SetVisibility(bUseUDS, true);
-            UE_LOG(LogEagleCloud, Log, TEXT("  SkyAtmosphere: visible %d -> %d (set to %d, now %d)"),
-                   bWasVisible ? 1 : 0, bUseUDS ? 1 : 0,
-                   bUseUDS ? 1 : 0, SkyAtmos->IsVisible() ? 1 : 0);
-        }
-        else
-        {
-            UE_LOG(LogEagleCloud, Warning, TEXT("  SkyAtmosphere component NOT found on UDS actor"));
         }
 
-        if (UExponentialHeightFogComponent* Fog =
-            UDSActorWithSkyAtmosphere->FindComponentByClass<UExponentialHeightFogComponent>())
-        {
-            Fog->SetVisibility(bUseUDS, true);
-            UE_LOG(LogEagleCloud, Log, TEXT("  ExponentialHeightFog: visibility set to %d"), bUseUDS ? 1 : 0);
-        }
-
-        // === Toggle 所有 StaticMeshComponent on UDS (含 child actors) ===
-        // UDS 内部用 Sky_Sphere / Space Nebula Sphere / Global Volumetric Fog Mesh /
-        // Inside Cloud Fog Mesh 等静态 mesh 渲染天空穹顶/星云/雾. 这些有的是 child actor
-        // 包装的, 必须 bIncludeFromChildActors=true 才找得到.
-        TArray<UStaticMeshComponent*> StaticMeshes;
-        UDSActorWithSkyAtmosphere->GetComponents<UStaticMeshComponent>(StaticMeshes, /*bIncludeFromChildActors=*/true);
-        for (UStaticMeshComponent* SM : StaticMeshes)
-        {
-            if (!SM) continue;
-            SM->SetVisibility(bUseUDS, true);
-            UE_LOG(LogEagleCloud, Log, TEXT("  StaticMesh '%s' (owner=%s) visibility set to %d"),
-                   *SM->GetName(),
-                   SM->GetOwner() ? *SM->GetOwner()->GetName() : TEXT("?"),
-                   bUseUDS ? 1 : 0);
-        }
-
-        // 注意: VolumetricCloud component 不 toggle —— UDS 用 Sky Mode (我们已经
-        // 通过 Bridge.SetSkyMode 切 Space/Volumetric) 来管 cloud 渲染. 这里再 toggle
-        // VolumetricCloud component 会跟 UDS 自身控制冲突, 导致云消失.
+        const FVector OldLoc = UDSActorWithSkyAtmosphere->GetActorLocation();
+        UE_LOG(LogEagleCloud, Log, TEXT("  UDS actor BEFORE: location=(%.0f,%.0f,%.0f)"),
+               OldLoc.X, OldLoc.Y, OldLoc.Z);
 
         // === Snap UDS XY to camera (only on transition into UDS), Z 锁定 GroundReferenceZ ===
         if (bUseUDS && bSnapUDSToCameraOnReactivation)
@@ -268,7 +244,7 @@ void AAtmosphereCloudManager::ApplyAtmosphereMode(double AltitudeKm, const FVect
     }
     else
     {
-        UE_LOG(LogEagleCloud, Warning, TEXT("  UDSActorWithSkyAtmosphere is null"));
+        UE_LOG(LogEagleCloud, Warning, TEXT("  UDSActorWithSkyAtmosphere is null (TransformMode/Snap skipped)"));
     }
 
     if (CesiumSunSkyActor)

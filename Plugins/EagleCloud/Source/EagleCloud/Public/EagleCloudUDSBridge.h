@@ -78,4 +78,20 @@ public:
      */
     UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category = "EagleCloud|Bridge")
     void SetSkyMode(int32 ModeIndex);
+
+    /**
+     * BP-implemented: call UDS's own Hide Sky function (Utility Functions category).
+     * UDS knows internally which components to hide for each category — avoids
+     * fighting UDS BP tick by manually toggling individual components.
+     *
+     * AAtmosphereCloudManager calls this at atmosphere mode transitions:
+     *   - High altitude (Cesium mode): bHideFogAtmosphere=true, bHideSkySphereClouds=true,
+     *     others=false. UDS hides atmosphere/sky/cloud meshes, keeps sun lighting.
+     *   - Low altitude (UDS mode): all false. UDS shows everything.
+     *
+     * BP implementation: just connect inputs to CachedUDS.HideSky.
+     */
+    UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category = "EagleCloud|Bridge")
+    void HideSky(bool bHideEntireActor, bool bHideLights, bool bHideFogAtmosphere,
+                 bool bHideSkySphereClouds, bool bHidePostProcessing);
 };
