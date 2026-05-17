@@ -13,6 +13,8 @@
 #include "Materials/MaterialParameterCollection.h"
 #include "Kismet/KismetMaterialLibrary.h"
 #include "Components/SkyAtmosphereComponent.h"
+#include "Components/ExponentialHeightFogComponent.h"
+#include "Components/VolumetricCloudComponent.h"
 
 AAtmosphereCloudManager::AAtmosphereCloudManager()
 {
@@ -164,7 +166,6 @@ void AAtmosphereCloudManager::ApplyAtmosphereMode(double AltitudeKm, const FVect
 {
     if (!bManageAtmosphereSwitch) return;
 
-    // 复用 SkyMode hysteresis 切换点（atmosphere 跟 SkyMode 同步）
     int32 DesiredMode = LastAppliedAtmosphereMode;
     if (AltitudeKm >= HighAltitudeKm + SkyModeSwitchHysteresisKm)
     {
@@ -179,49 +180,93 @@ void AAtmosphereCloudManager::ApplyAtmosphereMode(double AltitudeKm, const FVect
         DesiredMode = (AltitudeKm >= HighAltitudeKm) ? 1 : 0;
     }
 
-    // 只在 mode 真正切换时动手脚。不切就 return（避免 fog plane 跟着相机走）
     if (DesiredMode == LastAppliedAtmosphereMode) return;
 
     const bool bUseUDS = (DesiredMode == 0);
 
-    // === Visibility toggle ===
+    UE_LOG(LogEagleCloud, Log,
+           TEXT("==== AtmosphereMode TRANSITION: %d -> %d (bUseUDS=%s) at altitude %.1f km, camera=(%.0f,%.0f,%.0f) ===="),
+           LastAppliedAtmosphereMode, DesiredMode,
+           bUseUDS ? TEXT("true") : TEXT("false"),
+           AltitudeKm, CameraLoc.X, CameraLoc.Y, CameraLoc.Z);
+
+    // === Multi-component hide: SkyAtmosphere + ExponentialHeightFog + VolumetricCloud ===
+    // UDS 不只是 SkyAtmosphere，还可能挂 ExponentialHeightFog（看起来像切面）和
+    // VolumetricCloud。要彻底"消失"需要全 hide。
     if (UDSActorWithSkyAtmosphere)
     {
+        const FVector OldLoc = UDSActorWithSkyAtmosphere->GetActorLocation();
+        UE_LOG(LogEagleCloud, Log, TEXT("  UDS actor BEFORE: location=(%.0f,%.0f,%.0f)"),
+               OldLoc.X, OldLoc.Y, OldLoc.Z);
+
         if (USkyAtmosphereComponent* SkyAtmos =
             UDSActorWithSkyAtmosphere->FindComponentByClass<USkyAtmosphereComponent>())
         {
-            SkyAtmos->SetVisibility(bUseUDS, /*bPropagateToChildren=*/true);
+            const bool bWasVisible = SkyAtmos->IsVisible();
+            SkyAtmos->SetVisibility(bUseUDS, true);
+            UE_LOG(LogEagleCloud, Log, TEXT("  SkyAtmosphere: visible %d -> %d (set to %d, now %d)"),
+                   bWasVisible ? 1 : 0, bUseUDS ? 1 : 0,
+                   bUseUDS ? 1 : 0, SkyAtmos->IsVisible() ? 1 : 0);
+        }
+        else
+        {
+            UE_LOG(LogEagleCloud, Warning, TEXT("  SkyAtmosphere component NOT found on UDS actor"));
         }
 
-        // === 再次激活 UDS 时一次性 snap 位置 (XY only, Z 保持 GroundReferenceZ) ===
-        // 不每 tick follow — 那样 fog/atmosphere component 的 plane 渲染会出问题。
-        // 只在 Cesium → UDS 切换瞬间 snap 一次,让 atmosphere 中心对齐当前相机位置.
+        if (UExponentialHeightFogComponent* Fog =
+            UDSActorWithSkyAtmosphere->FindComponentByClass<UExponentialHeightFogComponent>())
+        {
+            Fog->SetVisibility(bUseUDS, true);
+            UE_LOG(LogEagleCloud, Log, TEXT("  ExponentialHeightFog: visibility set to %d"), bUseUDS ? 1 : 0);
+        }
+
+        if (UVolumetricCloudComponent* VC =
+            UDSActorWithSkyAtmosphere->FindComponentByClass<UVolumetricCloudComponent>())
+        {
+            VC->SetVisibility(bUseUDS, true);
+            UE_LOG(LogEagleCloud, Log, TEXT("  VolumetricCloud: visibility set to %d"), bUseUDS ? 1 : 0);
+        }
+
+        // === Snap UDS XY to camera (only on transition into UDS), Z 锁定 GroundReferenceZ ===
         if (bUseUDS && bSnapUDSToCameraOnReactivation)
         {
             const FVector SnapLoc(CameraLoc.X, CameraLoc.Y, GroundReferenceZ);
             UDSActorWithSkyAtmosphere->SetActorLocation(SnapLoc, /*bSweep=*/false);
+            const FVector NewLoc = UDSActorWithSkyAtmosphere->GetActorLocation();
             UE_LOG(LogEagleCloud, Log,
-                   TEXT("  UDS snapped to camera XY=(%.0f, %.0f), Z=%.0f (ground ref)"),
-                   SnapLoc.X, SnapLoc.Y, SnapLoc.Z);
+                   TEXT("  UDS SNAP: requested=(%.0f,%.0f,%.0f) actual=(%.0f,%.0f,%.0f)"),
+                   SnapLoc.X, SnapLoc.Y, SnapLoc.Z,
+                   NewLoc.X, NewLoc.Y, NewLoc.Z);
         }
+        else if (bUseUDS)
+        {
+            UE_LOG(LogEagleCloud, Log, TEXT("  UDS snap SKIPPED (bSnapUDSToCameraOnReactivation=false)"));
+        }
+    }
+    else
+    {
+        UE_LOG(LogEagleCloud, Warning, TEXT("  UDSActorWithSkyAtmosphere is null"));
     }
 
     if (CesiumSunSkyActor)
     {
+        const bool bWasHidden = CesiumSunSkyActor->IsHidden();
         CesiumSunSkyActor->SetActorHiddenInGame(bUseUDS);
         CesiumSunSkyActor->SetActorEnableCollision(!bUseUDS);
+        UE_LOG(LogEagleCloud, Log, TEXT("  CesiumSunSky: hidden %d -> %d"),
+               bWasHidden ? 1 : 0, CesiumSunSkyActor->IsHidden() ? 1 : 0);
+    }
+    else
+    {
+        UE_LOG(LogEagleCloud, Warning, TEXT("  CesiumSunSkyActor is null"));
     }
 
-    // 切回 UDS 时重置 painting state + coverage window
     if (bUseUDS && Bridge && Feeder)
     {
         Bridge->SetPaintingState(true, true, Feeder->PaintedOpacity, Feeder->AffectsGlobalValues);
         Bridge->SetCoverageWindow(FVector2D(CameraLoc.X, CameraLoc.Y));
+        UE_LOG(LogEagleCloud, Log, TEXT("  Painting state + coverage window reset"));
     }
-
-    UE_LOG(LogEagleCloud, Log,
-           TEXT("Atmosphere mode -> %s at altitude %.1f km"),
-           bUseUDS ? TEXT("UDS (XY snap to camera)") : TEXT("Cesium"), AltitudeKm);
 
     LastAppliedAtmosphereMode = DesiredMode;
 }

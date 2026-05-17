@@ -269,18 +269,6 @@ bool ASatelliteCloudFeeder::DrawGlobalRegionToRT(
         UE_LOG(LogEagleCloud, Log,
                TEXT("  DrawGlobalRegionToRT: UV start=(%.4f, %.4f) size=(%.4f, %.4f) RT=%dx%d"),
                UMin, VMin, USize, VSize, RT->SizeX, RT->SizeY);
-
-        if (GEngine)
-        {
-            const FString Msg = FString::Printf(
-                TEXT("[Feeder] Lat=%.3f Lon=%.3f  UV=(%.3f,%.3f) Size=(%.3f,%.3f)  RT=%dx%d"),
-                CenterLat, CenterLon, UMin, VMin, USize, VSize, RT->SizeX, RT->SizeY);
-            GEngine->AddOnScreenDebugMessage(
-                /*Key=*/ static_cast<uint64>(101),
-                /*Time=*/ 1.5f,
-                FColor::Cyan,
-                Msg);
-        }
     }
 
     UCanvas* Canvas = nullptr;
