@@ -230,18 +230,20 @@ void AAtmosphereCloudManager::ApplyAtmosphereMode(double AltitudeKm, const FVect
             UE_LOG(LogEagleCloud, Log, TEXT("  ExponentialHeightFog: visibility set to %d"), bUseUDS ? 1 : 0);
         }
 
-        // === Toggle 所有 StaticMeshComponent on UDS ===
+        // === Toggle 所有 StaticMeshComponent on UDS (含 child actors) ===
         // UDS 内部用 Sky_Sphere / Space Nebula Sphere / Global Volumetric Fog Mesh /
-        // Inside Cloud Fog Mesh 等静态 mesh 渲染天空穹顶/星云/雾. 从外面看是切面/球壳边缘.
-        // SkyAtmosphere hide 不影响这些, 必须单独 toggle.
+        // Inside Cloud Fog Mesh 等静态 mesh 渲染天空穹顶/星云/雾. 这些有的是 child actor
+        // 包装的, 必须 bIncludeFromChildActors=true 才找得到.
         TArray<UStaticMeshComponent*> StaticMeshes;
-        UDSActorWithSkyAtmosphere->GetComponents<UStaticMeshComponent>(StaticMeshes);
+        UDSActorWithSkyAtmosphere->GetComponents<UStaticMeshComponent>(StaticMeshes, /*bIncludeFromChildActors=*/true);
         for (UStaticMeshComponent* SM : StaticMeshes)
         {
             if (!SM) continue;
             SM->SetVisibility(bUseUDS, true);
-            UE_LOG(LogEagleCloud, Log, TEXT("  StaticMesh '%s' visibility set to %d"),
-                   *SM->GetName(), bUseUDS ? 1 : 0);
+            UE_LOG(LogEagleCloud, Log, TEXT("  StaticMesh '%s' (owner=%s) visibility set to %d"),
+                   *SM->GetName(),
+                   SM->GetOwner() ? *SM->GetOwner()->GetName() : TEXT("?"),
+                   bUseUDS ? 1 : 0);
         }
 
         // 注意: VolumetricCloud component 不 toggle —— UDS 用 Sky Mode (我们已经
