@@ -89,9 +89,13 @@ public:
      *     others=false. UDS hides atmosphere/sky/cloud meshes, keeps sun lighting.
      *   - Low altitude (UDS mode): all false. UDS shows everything.
      *
-     * BP implementation: just connect inputs to CachedUDS.HideSky.
+     * BP implementation:
+     *   Event HideUDSSky -> CachedUDS.HideSky (Target=CachedUDS, NOT self!)
+     *   连 5 个 bool 直接到 CachedUDS.HideSky 的同名 input.
+     *
+     * 名字加 UDS 前缀避免跟 Ultra_Dynamic_Sky.HideSky 同名导致 BP 里递归调 self.
      */
     UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category = "EagleCloud|Bridge")
-    void HideSky(bool bHideEntireActor, bool bHideLights, bool bHideFogAtmosphere,
-                 bool bHideSkySphereClouds, bool bHidePostProcessing);
+    void HideUDSSky(bool bHideEntireActor, bool bHideLights, bool bHideFogAtmosphere,
+                    bool bHideSkySphereClouds, bool bHidePostProcessing);
 };

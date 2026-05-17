@@ -193,19 +193,19 @@ void AAtmosphereCloudManager::ApplyAtmosphereMode(double AltitudeKm, const FVect
     // 避免跟 UDS BP tick 打架. 高空 hide fog+atmosphere+sky_sphere/clouds, 保留 lights.
     if (Bridge)
     {
-        Bridge->HideSky(
+        Bridge->HideUDSSky(
             /*bHideEntireActor=*/    false,     // 保留 actor 本身 (sun 需要)
             /*bHideLights=*/         false,     // 保留 sun/moon 光照 (Cesium Earth 需要)
             /*bHideFogAtmosphere=*/  !bUseUDS,  // 高空 hide atmosphere (Cesium 接管)
             /*bHideSkySphereClouds=*/ !bUseUDS, // 高空 hide sky dome + cloud mesh (切面来源)
             /*bHidePostProcessing=*/ false      // 保留 post processing
         );
-        UE_LOG(LogEagleCloud, Log, TEXT("  Bridge.HideSky(actor=0, lights=0, fog/atmos=%d, sky/clouds=%d, post=0)"),
+        UE_LOG(LogEagleCloud, Log, TEXT("  Bridge.HideUDSSky(actor=0, lights=0, fog/atmos=%d, sky/clouds=%d, post=0)"),
                !bUseUDS ? 1 : 0, !bUseUDS ? 1 : 0);
     }
     else
     {
-        UE_LOG(LogEagleCloud, Warning, TEXT("  Bridge is null, HideSky skipped"));
+        UE_LOG(LogEagleCloud, Warning, TEXT("  Bridge is null, HideUDSSky skipped"));
     }
 
     if (UDSActorWithSkyAtmosphere)
