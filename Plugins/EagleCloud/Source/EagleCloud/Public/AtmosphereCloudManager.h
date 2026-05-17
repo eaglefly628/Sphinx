@@ -123,12 +123,19 @@ public:
     bool bManageAtmosphereSwitch = true;
 
     /**
-     * Snap UDSActorWithSkyAtmosphere to camera location each tick (while UDS active).
-     * UDS atmosphere is flat-earth design — without following camera, after re-activation
-     * the atmosphere stays at its old world position and looks offset from Cesium Earth.
+     * Snap UDSActorWithSkyAtmosphere to camera XY (NOT Z) on re-activation.
+     *
+     * Why XY only: UDS contains ExponentialHeightFog / SkyAtmosphere components
+     * whose "plane" placement depends on world Z. Moving Z with camera causes
+     * fog plane to follow camera up, appearing as duplicate/wrong plane.
+     *
+     * Snap moment: only when atmosphere mode transitions from Cesium -> UDS
+     * (re-entering from space). NOT every tick — that breaks fog rendering.
+     *
+     * Z stays at GroundReferenceZ (typically 0 for Cesium projects).
      */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|Atmosphere")
-    bool bMakeUDSFollowCamera = true;
+    bool bSnapUDSToCameraOnReactivation = true;
 
     // ---------- Geo (matches feeder for ground reference) ----------
 

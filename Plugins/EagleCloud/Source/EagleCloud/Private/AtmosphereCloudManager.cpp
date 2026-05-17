@@ -164,7 +164,7 @@ void AAtmosphereCloudManager::ApplyAtmosphereMode(double AltitudeKm, const FVect
 {
     if (!bManageAtmosphereSwitch) return;
 
-    // 用 SkyMode hysteresis 复用 — 切换点相同（atmosphere 跟 SkyMode 同步切）
+    // 复用 SkyMode hysteresis 切换点（atmosphere 跟 SkyMode 同步）
     int32 DesiredMode = LastAppliedAtmosphereMode;
     if (AltitudeKm >= HighAltitudeKm + SkyModeSwitchHysteresisKm)
     {
@@ -179,24 +179,30 @@ void AAtmosphereCloudManager::ApplyAtmosphereMode(double AltitudeKm, const FVect
         DesiredMode = (AltitudeKm >= HighAltitudeKm) ? 1 : 0;
     }
 
-    const bool bUseUDS = (DesiredMode == 0);
-
-    // === UDS atmosphere 跟相机（关键：再次激活时位置不会留在老平面）===
-    // 即使 mode 没变，每 tick 都同步位置，确保 atmosphere 永远以相机为中心。
-    if (bMakeUDSFollowCamera && bUseUDS && UDSActorWithSkyAtmosphere)
-    {
-        UDSActorWithSkyAtmosphere->SetActorLocation(CameraLoc, /*bSweep=*/false);
-    }
-
-    // === Mode 切换（visibility toggle）===
+    // 只在 mode 真正切换时动手脚。不切就 return（避免 fog plane 跟着相机走）
     if (DesiredMode == LastAppliedAtmosphereMode) return;
 
+    const bool bUseUDS = (DesiredMode == 0);
+
+    // === Visibility toggle ===
     if (UDSActorWithSkyAtmosphere)
     {
         if (USkyAtmosphereComponent* SkyAtmos =
             UDSActorWithSkyAtmosphere->FindComponentByClass<USkyAtmosphereComponent>())
         {
             SkyAtmos->SetVisibility(bUseUDS, /*bPropagateToChildren=*/true);
+        }
+
+        // === 再次激活 UDS 时一次性 snap 位置 (XY only, Z 保持 GroundReferenceZ) ===
+        // 不每 tick follow — 那样 fog/atmosphere component 的 plane 渲染会出问题。
+        // 只在 Cesium → UDS 切换瞬间 snap 一次,让 atmosphere 中心对齐当前相机位置.
+        if (bUseUDS && bSnapUDSToCameraOnReactivation)
+        {
+            const FVector SnapLoc(CameraLoc.X, CameraLoc.Y, GroundReferenceZ);
+            UDSActorWithSkyAtmosphere->SetActorLocation(SnapLoc, /*bSweep=*/false);
+            UE_LOG(LogEagleCloud, Log,
+                   TEXT("  UDS snapped to camera XY=(%.0f, %.0f), Z=%.0f (ground ref)"),
+                   SnapLoc.X, SnapLoc.Y, SnapLoc.Z);
         }
     }
 
@@ -206,7 +212,7 @@ void AAtmosphereCloudManager::ApplyAtmosphereMode(double AltitudeKm, const FVect
         CesiumSunSkyActor->SetActorEnableCollision(!bUseUDS);
     }
 
-    // 切回 UDS 时重置 painting state + coverage window —— 避免 Space 期间状态丢失
+    // 切回 UDS 时重置 painting state + coverage window
     if (bUseUDS && Bridge && Feeder)
     {
         Bridge->SetPaintingState(true, true, Feeder->PaintedOpacity, Feeder->AffectsGlobalValues);
@@ -215,7 +221,7 @@ void AAtmosphereCloudManager::ApplyAtmosphereMode(double AltitudeKm, const FVect
 
     UE_LOG(LogEagleCloud, Log,
            TEXT("Atmosphere mode -> %s at altitude %.1f km"),
-           bUseUDS ? TEXT("UDS (snap to camera)") : TEXT("Cesium"), AltitudeKm);
+           bUseUDS ? TEXT("UDS (XY snap to camera)") : TEXT("Cesium"), AltitudeKm);
 
     LastAppliedAtmosphereMode = DesiredMode;
 }
