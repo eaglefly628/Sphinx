@@ -213,17 +213,27 @@ void AAtmosphereCloudManager::ApplyAtmosphereMode(double AltitudeKm, const FVect
 
     if (UDSActorWithSkyAtmosphere)
     {
-        // SkyAtmosphere TransformMode 修正 (一次性, snap 后 atmosphere 才真的跟 actor 走)
+        // === 直接 toggle SkyAtmosphereComponent (确认: dump 显示它 visible=1 就是那条弧) ===
+        // SkyAtmosphereComponent 不是 StaticMesh, 白名单遍历碰不到它; UDS HideSky 也没真关它.
+        // 必须直接 SetVisibility. 高空 hide (Cesium atmosphere 接管), 低空 show.
         if (USkyAtmosphereComponent* SkyAtmos =
             UDSActorWithSkyAtmosphere->FindComponentByClass<USkyAtmosphereComponent>())
         {
+            // TransformMode 修正 (snap 后 atmosphere 才真的跟 actor 走)
             if (SkyAtmos->TransformMode != ESkyAtmosphereTransformMode::PlanetTopAtComponentTransform)
             {
                 SkyAtmos->TransformMode = ESkyAtmosphereTransformMode::PlanetTopAtComponentTransform;
                 SkyAtmos->MarkRenderStateDirty();
                 UE_LOG(LogEagleCloud, Log, TEXT("  SkyAtmosphere TransformMode -> PlanetTopAtComponentTransform"));
             }
+            const bool bWas = SkyAtmos->IsVisible();
+            SkyAtmos->SetVisibility(bUseUDS, /*bPropagateToChildren=*/false);
+            UE_LOG(LogEagleCloud, Log, TEXT("  SkyAtmosphere SetVisibility: %d -> %d (now %d)"),
+                   bWas ? 1 : 0, bUseUDS ? 1 : 0, SkyAtmos->IsVisible() ? 1 : 0);
         }
+
+        // === 直接 toggle Space Nebula Sphere + Sky_Sphere (StaticMesh, dump 确认存在) ===
+        // 这些可能 child-actor 包装也可能直挂; 白名单已覆盖, 这里 log 确认状态.
 
         // === 精确 toggle ExponentialHeightFog (确认是切面来源之一: "平面圆环") ===
         // UDS HideSky 没管到这个 fog component, 高空时它的 fog plane 从外面看是圆环切面.
