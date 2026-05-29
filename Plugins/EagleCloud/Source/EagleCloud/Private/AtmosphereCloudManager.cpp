@@ -15,6 +15,7 @@
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Components/LightComponent.h"
+#include "Components/StaticMeshComponent.h"
 
 AAtmosphereCloudManager::AAtmosphereCloudManager()
 {
@@ -236,6 +237,30 @@ void AAtmosphereCloudManager::ApplyAtmosphereMode(double AltitudeKm, const FVect
             UE_LOG(LogEagleCloud, Log, TEXT("  ExponentialHeightFog '%s' (owner=%s) visibility -> %d"),
                    *Fog->GetName(),
                    Fog->GetOwner() ? *Fog->GetOwner()->GetName() : TEXT("?"),
+                   bUseUDS ? 1 : 0);
+        }
+
+        // === 精确 toggle Sky dome StaticMesh (确认: "半圆 skybox") ===
+        // UDS 的 Sky_Sphere / Space Nebula Sphere 等是包裹场景的大球 mesh, 内壁贴天空材质.
+        // 从太空往外看到球的远端内壁 = 半圆弧. HideSky 没真正 hide 它们.
+        // 含 child actors. 跳过装饰类 (ClockDisk/Compass/字母 N/S/E/W/Label/Handle).
+        TArray<UStaticMeshComponent*> SkyMeshes;
+        UDSActorWithSkyAtmosphere->GetComponents<UStaticMeshComponent>(SkyMeshes, /*bIncludeFromChildActors=*/true);
+        for (UStaticMeshComponent* SM : SkyMeshes)
+        {
+            if (!SM) continue;
+            const FString Nm = SM->GetName();
+            // 只 toggle 天空/雾/星云类大 mesh, 不动罗盘/时钟/方位字母等小装饰
+            const bool bIsSkyDome =
+                Nm.Contains(TEXT("Sky")) || Nm.Contains(TEXT("Sphere")) ||
+                Nm.Contains(TEXT("Nebula")) || Nm.Contains(TEXT("Fog")) ||
+                Nm.Contains(TEXT("Cloud")) || Nm.Contains(TEXT("Dome")) ||
+                Nm.Contains(TEXT("Atmosphere")) || Nm.Contains(TEXT("Star"));
+            if (!bIsSkyDome) continue;
+            SM->SetVisibility(bUseUDS, /*bPropagateToChildren=*/true);
+            UE_LOG(LogEagleCloud, Log, TEXT("  SkyMesh '%s' (owner=%s) visibility -> %d"),
+                   *Nm,
+                   SM->GetOwner() ? *SM->GetOwner()->GetName() : TEXT("?"),
                    bUseUDS ? 1 : 0);
         }
 
