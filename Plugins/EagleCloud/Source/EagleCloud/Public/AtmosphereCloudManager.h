@@ -178,6 +178,18 @@ public:
     UFUNCTION(CallInEditor, BlueprintCallable, Category = "EagleCloud|Diagnostics")
     void DumpAllAtmosphereSources();
 
+    /**
+     * Editor button: hide all PostProcessComponent on UDS. If the arc/halo
+     * disappears after this, the source is a screen-space PostProcess effect
+     * (Lens Flare / Atmospheric Halo / etc.) not a 3D component.
+     */
+    UFUNCTION(CallInEditor, BlueprintCallable, Category = "EagleCloud|Diagnostics")
+    void HideUDSPostProcess();
+
+    /** Editor button: restore PostProcessComponent visibility. */
+    UFUNCTION(CallInEditor, BlueprintCallable, Category = "EagleCloud|Diagnostics")
+    void ShowUDSPostProcess();
+
     // ---------- MPC parameter names ----------
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|MPC")

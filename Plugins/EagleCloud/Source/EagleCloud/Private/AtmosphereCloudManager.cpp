@@ -17,6 +17,7 @@
 #include "Components/LightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkyLightComponent.h"
+#include "Components/PostProcessComponent.h"
 #include "EngineUtils.h"
 
 AAtmosphereCloudManager::AAtmosphereCloudManager()
@@ -479,4 +480,46 @@ void AAtmosphereCloudManager::DumpAllAtmosphereSources()
     UE_LOG(LogEagleCloud, Log, TEXT("Summary: SkyAtmosphere=%d Fog=%d SkyLight=%d SkyMesh=%d"),
            SkyAtmosCount, FogCount, SkyLightCount, SkyMeshCount);
     UE_LOG(LogEagleCloud, Log, TEXT("===== DumpAllAtmosphereSources END ====="));
+}
+
+void AAtmosphereCloudManager::HideUDSPostProcess()
+{
+    if (!UDSActorWithSkyAtmosphere)
+    {
+        UE_LOG(LogEagleCloud, Warning, TEXT("HideUDSPostProcess: UDSActorWithSkyAtmosphere is null"));
+        return;
+    }
+
+    TArray<UPostProcessComponent*> PPs;
+    UDSActorWithSkyAtmosphere->GetComponents<UPostProcessComponent>(PPs, /*bIncludeFromChildActors=*/true);
+
+    int32 Count = 0;
+    for (UPostProcessComponent* PP : PPs)
+    {
+        if (!PP) continue;
+        // PostProcessComponent 用 bEnabled 控制是否生效, 不是 Visibility
+        PP->bEnabled = false;
+        PP->MarkRenderStateDirty();
+        UE_LOG(LogEagleCloud, Log, TEXT("HideUDSPostProcess: disabled '%s'"), *PP->GetName());
+        ++Count;
+    }
+    UE_LOG(LogEagleCloud, Log, TEXT("HideUDSPostProcess: disabled %d PostProcess components"), Count);
+}
+
+void AAtmosphereCloudManager::ShowUDSPostProcess()
+{
+    if (!UDSActorWithSkyAtmosphere) return;
+
+    TArray<UPostProcessComponent*> PPs;
+    UDSActorWithSkyAtmosphere->GetComponents<UPostProcessComponent>(PPs, true);
+
+    int32 Count = 0;
+    for (UPostProcessComponent* PP : PPs)
+    {
+        if (!PP) continue;
+        PP->bEnabled = true;
+        PP->MarkRenderStateDirty();
+        ++Count;
+    }
+    UE_LOG(LogEagleCloud, Log, TEXT("ShowUDSPostProcess: enabled %d PostProcess components"), Count);
 }
