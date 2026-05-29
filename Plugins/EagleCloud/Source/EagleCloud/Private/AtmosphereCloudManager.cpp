@@ -13,6 +13,7 @@
 #include "Materials/MaterialParameterCollection.h"
 #include "Kismet/KismetMaterialLibrary.h"
 #include "Components/SkyAtmosphereComponent.h"
+#include "Components/ExponentialHeightFogComponent.h"
 
 AAtmosphereCloudManager::AAtmosphereCloudManager()
 {
@@ -220,6 +221,21 @@ void AAtmosphereCloudManager::ApplyAtmosphereMode(double AltitudeKm, const FVect
                 SkyAtmos->MarkRenderStateDirty();
                 UE_LOG(LogEagleCloud, Log, TEXT("  SkyAtmosphere TransformMode -> PlanetTopAtComponentTransform"));
             }
+        }
+
+        // === 精确 toggle ExponentialHeightFog (确认是切面来源之一: "平面圆环") ===
+        // UDS HideSky 没管到这个 fog component, 高空时它的 fog plane 从外面看是圆环切面.
+        // 含 child actors (UDS 的 fog 可能是 child actor 包装的).
+        TArray<UExponentialHeightFogComponent*> FogComps;
+        UDSActorWithSkyAtmosphere->GetComponents<UExponentialHeightFogComponent>(FogComps, /*bIncludeFromChildActors=*/true);
+        for (UExponentialHeightFogComponent* Fog : FogComps)
+        {
+            if (!Fog) continue;
+            Fog->SetVisibility(bUseUDS, /*bPropagateToChildren=*/true);
+            UE_LOG(LogEagleCloud, Log, TEXT("  ExponentialHeightFog '%s' (owner=%s) visibility -> %d"),
+                   *Fog->GetName(),
+                   Fog->GetOwner() ? *Fog->GetOwner()->GetName() : TEXT("?"),
+                   bUseUDS ? 1 : 0);
         }
 
         const FVector OldLoc = UDSActorWithSkyAtmosphere->GetActorLocation();
