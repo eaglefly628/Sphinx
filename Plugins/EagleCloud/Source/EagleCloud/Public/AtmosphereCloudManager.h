@@ -190,6 +190,22 @@ public:
     UFUNCTION(CallInEditor, BlueprintCallable, Category = "EagleCloud|Diagnostics")
     void ShowUDSPostProcess();
 
+    /**
+     * Editor: index of single PostProcessComponent to toggle (0-based).
+     * Use DumpUDSComponents to see the list, then set this index and click
+     * TogglePostProcessByIndex to disable just that one.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|Diagnostics")
+    int32 PostProcessTestIndex = 0;
+
+    /** Editor button: disable ONLY the PostProcess at PostProcessTestIndex. */
+    UFUNCTION(CallInEditor, BlueprintCallable, Category = "EagleCloud|Diagnostics")
+    void DisableUDSPostProcessAtIndex();
+
+    /** Editor button: enable ONLY the PostProcess at PostProcessTestIndex. */
+    UFUNCTION(CallInEditor, BlueprintCallable, Category = "EagleCloud|Diagnostics")
+    void EnableUDSPostProcessAtIndex();
+
     // ---------- MPC parameter names ----------
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|MPC")

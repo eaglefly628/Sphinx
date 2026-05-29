@@ -523,3 +523,49 @@ void AAtmosphereCloudManager::ShowUDSPostProcess()
     }
     UE_LOG(LogEagleCloud, Log, TEXT("ShowUDSPostProcess: enabled %d PostProcess components"), Count);
 }
+
+void AAtmosphereCloudManager::DisableUDSPostProcessAtIndex()
+{
+    if (!UDSActorWithSkyAtmosphere)
+    {
+        UE_LOG(LogEagleCloud, Warning, TEXT("DisableUDSPostProcessAtIndex: UDS null"));
+        return;
+    }
+
+    TArray<UPostProcessComponent*> PPs;
+    UDSActorWithSkyAtmosphere->GetComponents<UPostProcessComponent>(PPs, /*bIncludeFromChildActors=*/true);
+
+    if (!PPs.IsValidIndex(PostProcessTestIndex))
+    {
+        UE_LOG(LogEagleCloud, Warning, TEXT("DisableUDSPostProcessAtIndex: index %d out of range (found %d PostProcess)"),
+               PostProcessTestIndex, PPs.Num());
+        for (int32 i = 0; i < PPs.Num(); ++i)
+        {
+            UE_LOG(LogEagleCloud, Log, TEXT("  [%d] %s enabled=%d"),
+                   i, *PPs[i]->GetName(), PPs[i]->bEnabled ? 1 : 0);
+        }
+        return;
+    }
+
+    UPostProcessComponent* PP = PPs[PostProcessTestIndex];
+    PP->bEnabled = false;
+    PP->MarkRenderStateDirty();
+    UE_LOG(LogEagleCloud, Log, TEXT("DisableUDSPostProcessAtIndex: disabled [%d] '%s'"),
+           PostProcessTestIndex, *PP->GetName());
+}
+
+void AAtmosphereCloudManager::EnableUDSPostProcessAtIndex()
+{
+    if (!UDSActorWithSkyAtmosphere) return;
+
+    TArray<UPostProcessComponent*> PPs;
+    UDSActorWithSkyAtmosphere->GetComponents<UPostProcessComponent>(PPs, true);
+
+    if (!PPs.IsValidIndex(PostProcessTestIndex)) return;
+
+    UPostProcessComponent* PP = PPs[PostProcessTestIndex];
+    PP->bEnabled = true;
+    PP->MarkRenderStateDirty();
+    UE_LOG(LogEagleCloud, Log, TEXT("EnableUDSPostProcessAtIndex: enabled [%d] '%s'"),
+           PostProcessTestIndex, *PP->GetName());
+}
