@@ -16,6 +16,8 @@
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Components/LightComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/SkyLightComponent.h"
+#include "EngineUtils.h"
 
 AAtmosphereCloudManager::AAtmosphereCloudManager()
 {
@@ -391,4 +393,90 @@ void AAtmosphereCloudManager::ShowAllUDSComponents()
         ++Count;
     }
     UE_LOG(LogEagleCloud, Log, TEXT("ShowAllUDSComponents: showed %d components"), Count);
+}
+
+void AAtmosphereCloudManager::DumpAllAtmosphereSources()
+{
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        UE_LOG(LogEagleCloud, Warning, TEXT("DumpAllAtmosphereSources: World is null"));
+        return;
+    }
+
+    UE_LOG(LogEagleCloud, Log, TEXT("================================================"));
+    UE_LOG(LogEagleCloud, Log, TEXT("===== DumpAllAtmosphereSources (entire level) ====="));
+    UE_LOG(LogEagleCloud, Log, TEXT("================================================"));
+
+    // 遍历所有 actor, 找跟 atmosphere/sky/fog 相关的 component
+    int32 SkyAtmosCount = 0, FogCount = 0, VolCloudCount = 0, SkyLightCount = 0, SkyMeshCount = 0, PostProcCount = 0;
+
+    for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
+    {
+        AActor* A = *ActorIt;
+        if (!A) continue;
+
+        // SkyAtmosphereComponent
+        TArray<USkyAtmosphereComponent*> SAs;
+        A->GetComponents<USkyAtmosphereComponent>(SAs, /*bIncludeFromChildActors=*/true);
+        for (USkyAtmosphereComponent* SA : SAs)
+        {
+            if (!SA) continue;
+            UE_LOG(LogEagleCloud, Log, TEXT("[SkyAtmosphere] actor=%s comp=%s visible=%d transform=%d"),
+                   *A->GetName(), *SA->GetName(),
+                   SA->IsVisible() ? 1 : 0,
+                   (int32)SA->TransformMode);
+            ++SkyAtmosCount;
+        }
+
+        // ExponentialHeightFogComponent
+        TArray<UExponentialHeightFogComponent*> Fs;
+        A->GetComponents<UExponentialHeightFogComponent>(Fs, true);
+        for (UExponentialHeightFogComponent* F : Fs)
+        {
+            if (!F) continue;
+            UE_LOG(LogEagleCloud, Log, TEXT("[ExpHeightFog] actor=%s comp=%s visible=%d density=%.4f"),
+                   *A->GetName(), *F->GetName(),
+                   F->IsVisible() ? 1 : 0,
+                   F->FogDensity);
+            ++FogCount;
+        }
+
+        // SkyLightComponent
+        TArray<USkyLightComponent*> SLs;
+        A->GetComponents<USkyLightComponent>(SLs, true);
+        for (USkyLightComponent* SL : SLs)
+        {
+            if (!SL) continue;
+            UE_LOG(LogEagleCloud, Log, TEXT("[SkyLight] actor=%s comp=%s visible=%d intensity=%.2f"),
+                   *A->GetName(), *SL->GetName(),
+                   SL->IsVisible() ? 1 : 0,
+                   SL->Intensity);
+            ++SkyLightCount;
+        }
+
+        // StaticMeshComponent with sky/atmosphere/dome-like names
+        TArray<UStaticMeshComponent*> SMs;
+        A->GetComponents<UStaticMeshComponent>(SMs, true);
+        for (UStaticMeshComponent* SM : SMs)
+        {
+            if (!SM) continue;
+            const FString Nm = SM->GetName();
+            const bool bLooksSky =
+                Nm.Contains(TEXT("Sky")) || Nm.Contains(TEXT("Sphere")) ||
+                Nm.Contains(TEXT("Nebula")) || Nm.Contains(TEXT("Dome")) ||
+                Nm.Contains(TEXT("Atmosphere")) || Nm.Contains(TEXT("Halo")) ||
+                Nm.Contains(TEXT("Cosmos")) || Nm.Contains(TEXT("Space")) ||
+                Nm.Contains(TEXT("Star"));
+            if (!bLooksSky) continue;
+            UE_LOG(LogEagleCloud, Log, TEXT("[SkyMesh] actor=%s comp=%s visible=%d"),
+                   *A->GetName(), *Nm, SM->IsVisible() ? 1 : 0);
+            ++SkyMeshCount;
+        }
+    }
+
+    UE_LOG(LogEagleCloud, Log, TEXT("------------------------------------------------"));
+    UE_LOG(LogEagleCloud, Log, TEXT("Summary: SkyAtmosphere=%d Fog=%d SkyLight=%d SkyMesh=%d"),
+           SkyAtmosCount, FogCount, SkyLightCount, SkyMeshCount);
+    UE_LOG(LogEagleCloud, Log, TEXT("===== DumpAllAtmosphereSources END ====="));
 }

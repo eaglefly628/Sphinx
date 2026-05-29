@@ -169,6 +169,15 @@ public:
     UFUNCTION(CallInEditor, BlueprintCallable, Category = "EagleCloud|Diagnostics")
     void ShowAllUDSComponents();
 
+    /**
+     * Editor button: scan the ENTIRE level for atmosphere-related components
+     * (SkyAtmosphere, ExponentialHeightFog, VolumetricCloud, SkyLight, atmospheric
+     * StaticMesh, PostProcess) — including ones NOT on UDS. Find rogue sources
+     * causing arcs/halos at high altitude.
+     */
+    UFUNCTION(CallInEditor, BlueprintCallable, Category = "EagleCloud|Diagnostics")
+    void DumpAllAtmosphereSources();
+
     // ---------- MPC parameter names ----------
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|MPC")
