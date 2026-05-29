@@ -146,6 +146,29 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|Geo")
     double GroundReferenceZ = 0.0;
 
+    // ---------- Diagnostics ----------
+
+    /**
+     * Editor button: dump EVERY component on UDSActorWithSkyAtmosphere (and its
+     * child actors) to the Output Log — name, class, visibility. Use this to
+     * find which component renders the "blue arc" that needs hiding in space.
+     */
+    UFUNCTION(CallInEditor, BlueprintCallable, Category = "EagleCloud|Diagnostics")
+    void DumpUDSComponents();
+
+    /**
+     * Editor button: hide ALL primitive/scene components on UDS (atmosphere,
+     * fog, meshes, volumetric cloud, etc.) so you can confirm everything is
+     * gone. Click DumpUDSComponents first to see the list, then toggle this
+     * to find the arc culprit by process of elimination.
+     */
+    UFUNCTION(CallInEditor, BlueprintCallable, Category = "EagleCloud|Diagnostics")
+    void HideAllUDSComponents();
+
+    /** Editor button: restore visibility of all UDS components hidden above. */
+    UFUNCTION(CallInEditor, BlueprintCallable, Category = "EagleCloud|Diagnostics")
+    void ShowAllUDSComponents();
+
     // ---------- MPC parameter names ----------
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|MPC")

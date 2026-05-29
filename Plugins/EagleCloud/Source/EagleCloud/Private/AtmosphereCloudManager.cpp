@@ -14,6 +14,7 @@
 #include "Kismet/KismetMaterialLibrary.h"
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
+#include "Components/LightComponent.h"
 
 AAtmosphereCloudManager::AAtmosphereCloudManager()
 {
@@ -284,4 +285,75 @@ void AAtmosphereCloudManager::ApplyAtmosphereMode(double AltitudeKm, const FVect
     }
 
     LastAppliedAtmosphereMode = DesiredMode;
+}
+
+// ============ Diagnostics (editor buttons) ============
+
+void AAtmosphereCloudManager::DumpUDSComponents()
+{
+    if (!UDSActorWithSkyAtmosphere)
+    {
+        UE_LOG(LogEagleCloud, Warning, TEXT("DumpUDSComponents: UDSActorWithSkyAtmosphere is null"));
+        return;
+    }
+
+    TArray<USceneComponent*> Comps;
+    UDSActorWithSkyAtmosphere->GetComponents<USceneComponent>(Comps, /*bIncludeFromChildActors=*/true);
+
+    UE_LOG(LogEagleCloud, Log, TEXT("===== DumpUDSComponents: %d scene components on %s ====="),
+           Comps.Num(), *UDSActorWithSkyAtmosphere->GetName());
+    for (USceneComponent* C : Comps)
+    {
+        if (!C) continue;
+        UE_LOG(LogEagleCloud, Log, TEXT("  [%s] class=%s visible=%d owner=%s"),
+               *C->GetName(),
+               *C->GetClass()->GetName(),
+               C->IsVisible() ? 1 : 0,
+               C->GetOwner() ? *C->GetOwner()->GetName() : TEXT("?"));
+    }
+    UE_LOG(LogEagleCloud, Log, TEXT("===== DumpUDSComponents END ====="));
+}
+
+void AAtmosphereCloudManager::HideAllUDSComponents()
+{
+    if (!UDSActorWithSkyAtmosphere)
+    {
+        UE_LOG(LogEagleCloud, Warning, TEXT("HideAllUDSComponents: UDSActorWithSkyAtmosphere is null"));
+        return;
+    }
+
+    TArray<USceneComponent*> Comps;
+    UDSActorWithSkyAtmosphere->GetComponents<USceneComponent>(Comps, /*bIncludeFromChildActors=*/true);
+
+    int32 Count = 0;
+    for (USceneComponent* C : Comps)
+    {
+        if (!C) continue;
+        // 跳过 light component — 保留太阳/月亮光照 (Cesium Earth 需要)
+        if (C->IsA<ULightComponent>()) continue;
+        C->SetVisibility(false, /*bPropagateToChildren=*/false);
+        ++Count;
+    }
+    UE_LOG(LogEagleCloud, Log, TEXT("HideAllUDSComponents: hid %d components (lights kept)"), Count);
+}
+
+void AAtmosphereCloudManager::ShowAllUDSComponents()
+{
+    if (!UDSActorWithSkyAtmosphere)
+    {
+        UE_LOG(LogEagleCloud, Warning, TEXT("ShowAllUDSComponents: UDSActorWithSkyAtmosphere is null"));
+        return;
+    }
+
+    TArray<USceneComponent*> Comps;
+    UDSActorWithSkyAtmosphere->GetComponents<USceneComponent>(Comps, /*bIncludeFromChildActors=*/true);
+
+    int32 Count = 0;
+    for (USceneComponent* C : Comps)
+    {
+        if (!C) continue;
+        C->SetVisibility(true, /*bPropagateToChildren=*/false);
+        ++Count;
+    }
+    UE_LOG(LogEagleCloud, Log, TEXT("ShowAllUDSComponents: showed %d components"), Count);
 }
