@@ -206,6 +206,34 @@ public:
     UFUNCTION(CallInEditor, BlueprintCallable, Category = "EagleCloud|Diagnostics")
     void EnableUDSPostProcessAtIndex();
 
+    /**
+     * Editor button: dump WeightedBlendables (post-process materials) of each
+     * UDS PostProcessComponent. The "halo ring" is likely one of these materials.
+     * After dump, set PostProcessBlendableIndex and click DisablePPBlendableAtIndex
+     * to disable just that one material (keeping tone mapping intact).
+     */
+    UFUNCTION(CallInEditor, BlueprintCallable, Category = "EagleCloud|Diagnostics")
+    void DumpPostProcessBlendables();
+
+    /**
+     * Which PostProcess component (0/1) to operate on for the blendable test.
+     * Index 1 was identified as the ring-rendering PP that also has tone mapping.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|Diagnostics")
+    int32 PPBlendableTargetPP = 1;
+
+    /** Which blendable inside PPBlendableTargetPP to toggle (0-based). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|Diagnostics")
+    int32 PPBlendableIndex = 0;
+
+    /** Disable a single blendable (set weight 0) at PPBlendableTargetPP[PPBlendableIndex]. */
+    UFUNCTION(CallInEditor, BlueprintCallable, Category = "EagleCloud|Diagnostics")
+    void DisablePPBlendableAtIndex();
+
+    /** Re-enable that blendable. */
+    UFUNCTION(CallInEditor, BlueprintCallable, Category = "EagleCloud|Diagnostics")
+    void EnablePPBlendableAtIndex();
+
     // ---------- MPC parameter names ----------
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EagleCloud|MPC")

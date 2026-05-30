@@ -569,3 +569,87 @@ void AAtmosphereCloudManager::EnableUDSPostProcessAtIndex()
     UE_LOG(LogEagleCloud, Log, TEXT("EnableUDSPostProcessAtIndex: enabled [%d] '%s'"),
            PostProcessTestIndex, *PP->GetName());
 }
+
+void AAtmosphereCloudManager::DumpPostProcessBlendables()
+{
+    if (!UDSActorWithSkyAtmosphere)
+    {
+        UE_LOG(LogEagleCloud, Warning, TEXT("DumpPostProcessBlendables: UDS null"));
+        return;
+    }
+
+    TArray<UPostProcessComponent*> PPs;
+    UDSActorWithSkyAtmosphere->GetComponents<UPostProcessComponent>(PPs, true);
+
+    UE_LOG(LogEagleCloud, Log, TEXT("===== DumpPostProcessBlendables ====="));
+    for (int32 i = 0; i < PPs.Num(); ++i)
+    {
+        UPostProcessComponent* PP = PPs[i];
+        if (!PP) continue;
+        const FWeightedBlendables& WB = PP->Settings.WeightedBlendables;
+        UE_LOG(LogEagleCloud, Log, TEXT("[PP %d] '%s' enabled=%d blendables=%d"),
+               i, *PP->GetName(), PP->bEnabled ? 1 : 0, WB.Array.Num());
+        for (int32 b = 0; b < WB.Array.Num(); ++b)
+        {
+            const FWeightedBlendable& WBE = WB.Array[b];
+            FString ObjName = WBE.Object ? WBE.Object->GetName() : TEXT("(null)");
+            FString ObjClass = WBE.Object ? WBE.Object->GetClass()->GetName() : TEXT("(null)");
+            UE_LOG(LogEagleCloud, Log, TEXT("  [B%d] weight=%.2f obj='%s' class=%s"),
+                   b, WBE.Weight, *ObjName, *ObjClass);
+        }
+    }
+    UE_LOG(LogEagleCloud, Log, TEXT("===== DumpPostProcessBlendables END ====="));
+}
+
+void AAtmosphereCloudManager::DisablePPBlendableAtIndex()
+{
+    if (!UDSActorWithSkyAtmosphere)
+    {
+        UE_LOG(LogEagleCloud, Warning, TEXT("DisablePPBlendableAtIndex: UDS null"));
+        return;
+    }
+
+    TArray<UPostProcessComponent*> PPs;
+    UDSActorWithSkyAtmosphere->GetComponents<UPostProcessComponent>(PPs, true);
+
+    if (!PPs.IsValidIndex(PPBlendableTargetPP))
+    {
+        UE_LOG(LogEagleCloud, Warning, TEXT("DisablePPBlendableAtIndex: PP index %d invalid"), PPBlendableTargetPP);
+        return;
+    }
+
+    UPostProcessComponent* PP = PPs[PPBlendableTargetPP];
+    FWeightedBlendables& WB = PP->Settings.WeightedBlendables;
+
+    if (!WB.Array.IsValidIndex(PPBlendableIndex))
+    {
+        UE_LOG(LogEagleCloud, Warning, TEXT("DisablePPBlendableAtIndex: blendable index %d invalid (count=%d)"),
+               PPBlendableIndex, WB.Array.Num());
+        return;
+    }
+
+    WB.Array[PPBlendableIndex].Weight = 0.0f;
+    PP->MarkRenderStateDirty();
+    UE_LOG(LogEagleCloud, Log, TEXT("DisablePPBlendableAtIndex: PP[%d] blendable[%d] weight->0"),
+           PPBlendableTargetPP, PPBlendableIndex);
+}
+
+void AAtmosphereCloudManager::EnablePPBlendableAtIndex()
+{
+    if (!UDSActorWithSkyAtmosphere) return;
+
+    TArray<UPostProcessComponent*> PPs;
+    UDSActorWithSkyAtmosphere->GetComponents<UPostProcessComponent>(PPs, true);
+
+    if (!PPs.IsValidIndex(PPBlendableTargetPP)) return;
+
+    UPostProcessComponent* PP = PPs[PPBlendableTargetPP];
+    FWeightedBlendables& WB = PP->Settings.WeightedBlendables;
+
+    if (!WB.Array.IsValidIndex(PPBlendableIndex)) return;
+
+    WB.Array[PPBlendableIndex].Weight = 1.0f;
+    PP->MarkRenderStateDirty();
+    UE_LOG(LogEagleCloud, Log, TEXT("EnablePPBlendableAtIndex: PP[%d] blendable[%d] weight->1"),
+           PPBlendableTargetPP, PPBlendableIndex);
+}
