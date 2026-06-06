@@ -76,6 +76,62 @@ void AAtmosphereCloudManager::Tick(float DeltaSeconds)
     ApplyBlend(MacroAlpha, UDSDensity, CurrentAltitudeKm);
     ApplySkyMode(CurrentAltitudeKm);
     ApplyAtmosphereMode(CurrentAltitudeKm, CameraLoc);
+
+    // === 每 tick enforce atmosphere component visibility ===
+    // UDS BP Tick 会反复把 SkyAtmosphere/Sky_Sphere/Fog 设回 visible=true.
+    // RenderDoc 截图证实: 即使我们在 ApplyAtmosphereMode 设了 SetVisibility(false),
+    // 下一帧 UDS BP 又设回来, drawcall 仍然在画.
+    // 解决: 每 tick 重新 enforce 当前 atmosphere mode 该有的状态.
+    if (bManageAtmosphereSwitch && UDSActorWithSkyAtmosphere && LastAppliedAtmosphereMode != -1)
+    {
+        const bool bUseUDS = (LastAppliedAtmosphereMode == 0);
+        EnforceUDSAtmosphereVisibility(bUseUDS);
+    }
+}
+
+void AAtmosphereCloudManager::EnforceUDSAtmosphereVisibility(bool bUseUDS)
+{
+    if (!UDSActorWithSkyAtmosphere) return;
+
+    // SkyAtmosphere
+    if (USkyAtmosphereComponent* SkyAtmos =
+        UDSActorWithSkyAtmosphere->FindComponentByClass<USkyAtmosphereComponent>())
+    {
+        if (SkyAtmos->IsVisible() != bUseUDS)
+        {
+            SkyAtmos->SetVisibility(bUseUDS, false);
+        }
+    }
+
+    // ExponentialHeightFog (含 child actors)
+    TArray<UExponentialHeightFogComponent*> FogComps;
+    UDSActorWithSkyAtmosphere->GetComponents<UExponentialHeightFogComponent>(FogComps, true);
+    for (UExponentialHeightFogComponent* Fog : FogComps)
+    {
+        if (Fog && Fog->IsVisible() != bUseUDS)
+        {
+            Fog->SetVisibility(bUseUDS, true);
+        }
+    }
+
+    // Sky dome StaticMeshes (含 child actors), 同 ApplyAtmosphereMode 的白名单
+    TArray<UStaticMeshComponent*> SkyMeshes;
+    UDSActorWithSkyAtmosphere->GetComponents<UStaticMeshComponent>(SkyMeshes, true);
+    for (UStaticMeshComponent* SM : SkyMeshes)
+    {
+        if (!SM) continue;
+        const FString Nm = SM->GetName();
+        const bool bIsSkyDome =
+            Nm.Contains(TEXT("Sky")) || Nm.Contains(TEXT("Sphere")) ||
+            Nm.Contains(TEXT("Nebula")) || Nm.Contains(TEXT("Fog")) ||
+            Nm.Contains(TEXT("Cloud")) || Nm.Contains(TEXT("Dome")) ||
+            Nm.Contains(TEXT("Atmosphere")) || Nm.Contains(TEXT("Star"));
+        if (!bIsSkyDome) continue;
+        if (SM->IsVisible() != bUseUDS)
+        {
+            SM->SetVisibility(bUseUDS, true);
+        }
+    }
 }
 
 FVector AAtmosphereCloudManager::GetCameraWorldLocation() const

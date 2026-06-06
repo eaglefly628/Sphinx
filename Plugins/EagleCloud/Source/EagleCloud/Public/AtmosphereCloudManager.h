@@ -277,6 +277,13 @@ private:
     /** Toggle UDS SkyAtmosphere component vs CesiumSunSky actor based on altitude. */
     void ApplyAtmosphereMode(double AltitudeKm, const FVector& CameraLoc);
 
+    /**
+     * Force UDS atmosphere/fog/sky-dome components to match the current atmosphere
+     * mode. Called every Tick to override UDS BP's repeated SetVisibility(true).
+     * RenderDoc confirms UDS BP re-enables these components every frame.
+     */
+    void EnforceUDSAtmosphereVisibility(bool bUseUDS);
+
     /** Last sky mode index we wrote. -1 = never written yet. */
     int32 LastAppliedSkyMode = -1;
 
