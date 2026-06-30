@@ -1,0 +1,14 @@
+# Node / Playwright (dev-only, for headless viewer screenshots)
+node_modules/
+package-lock.json
+*.tgz
+
+# Python
+__pycache__/
+*.pyc
+
+# Large regenerable mesh export (GLB is committed for the viewer; OBJ is not)
+output/ground.obj
+
+# User-provided real tiles
+input/tile.*

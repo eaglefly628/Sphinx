@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sphinx · Satellite Ground Surface Viewer</title>
+<link rel="icon" href="data:," />
+<style>
+  html,body{margin:0;height:100%;background:#101216;color:#e8e8e8;
+    font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;overflow:hidden}
+  #app{position:fixed;inset:0}
+  #panel{position:fixed;top:12px;left:12px;width:268px;background:rgba(20,22,28,.86);
+    border:1px solid #2c2f38;border-radius:10px;padding:12px 14px;backdrop-filter:blur(6px)}
+  #panel h1{font-size:14px;margin:0 0 2px}
+  #panel .sub{font-size:11px;color:#9aa3b2;margin:0 0 10px}
+  .row{display:flex;gap:6px;margin:8px 0;flex-wrap:wrap}
+  button{flex:1;min-width:64px;background:#222632;color:#e8e8e8;border:1px solid #353a47;
+    border-radius:7px;padding:7px 6px;font-size:12px;cursor:pointer}
+  button.active{background:#3a6df0;border-color:#3a6df0}
+  label{font-size:11px;color:#aeb6c4;display:flex;justify-content:space-between;margin-top:8px}
+  input[type=range]{width:100%}
+  #legend{margin-top:10px;font-size:11px;max-height:148px;overflow:auto}
+  #legend div{display:flex;align-items:center;gap:6px;margin:2px 0}
+  .sw{width:12px;height:12px;border-radius:3px;border:1px solid #0006}
+  #stats{position:fixed;bottom:10px;left:12px;font-size:11px;color:#8b93a4}
+  #err{position:fixed;inset:auto 12px 12px 12px;color:#ff7a7a;font-size:12px;white-space:pre-wrap}
+</style>
+<script type="importmap">
+{ "imports": {
+    "three": "./vendor/three.module.js",
+    "three/addons/": "./vendor/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="app"></div>
+<div id="panel">
+  <h1>Satellite Ground Surface</h1>
+  <p class="sub" id="subtitle">loading…</p>
+  <div class="row" id="modes">
+    <button data-mode="0">Satellite</button>
+    <button data-mode="1" class="active">Layered</button>
+    <button data-mode="2">Segmentation</button>
+  </div>
+  <label>Relief exaggeration <span id="rlabel">6×</span></label>
+  <input id="relief" type="range" min="1" max="30" value="6" />
+  <label>Sun azimuth <span id="slabel">315°</span></label>
+  <input id="sun" type="range" min="0" max="360" value="315" />
+  <div class="row">
+    <button id="wire">Wireframe</button>
+    <button id="objs" class="active">Objects</button>
+  </div>
+  <div id="legend"></div>
+</div>
+<div id="stats"></div>
+<div id="err"></div>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

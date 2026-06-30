@@ -1,0 +1,710 @@
+{
+  "schema": "sphinx.surface_tile/1.0",
+  "tile_id": "shanghai_demo_0_0",
+  "source": {
+    "kind": "synthetic",
+    "note": "Procedural stand-in -- egress proxy blocks satellite tile servers (403). Drop input/tile.png to use a real tile.",
+    "seed": 7
+  },
+  "super_resolution": {
+    "method": "classical_lanczos_unsharp",
+    "scale": 2,
+    "hallucinated": false
+  },
+  "geo": {
+    "crs": "WGS84",
+    "origin_lon": 121.47,
+    "origin_lat": 31.23,
+    "min_lon": 121.46996278578179,
+    "min_lat": 31.230000000550845,
+    "max_lon": 121.47268709489347,
+    "max_lat": 31.23234098817882,
+    "utm_zone": 51,
+    "epsg": 32651,
+    "northern": true,
+    "size_m": 256.0,
+    "easting0": 354280.6042568624,
+    "northing0": 3456101.06544708,
+    "geotransform_utm": [
+      354280.6042568624,
+      0.25,
+      0.0,
+      3456357.06544708,
+      0.0,
+      -0.25
+    ],
+    "geotransform_geo": [
+      121.46996278578179,
+      2.6604581168793162e-06,
+      0.0,
+      31.23234098817882,
+      0.0,
+      -2.2861207304436526e-06
+    ],
+    "note": "geotransform maps albedo pixel(col,row, top-left) -> CRS"
+  },
+  "raster": {
+    "albedo": {
+      "path": "albedo.png",
+      "width": 1024,
+      "height": 1024,
+      "mpp": 0.25
+    },
+    "splat": {
+      "paths": [
+        "splat_0_rgba.png",
+        "splat_1_rgba.png"
+      ],
+      "width": 512,
+      "height": 512,
+      "mpp": 0.5,
+      "channels": [
+        "grass",
+        "tree",
+        "road",
+        "concrete",
+        "building",
+        "water",
+        "soil",
+        "object"
+      ],
+      "packing": "4 weights per RGBA texture"
+    },
+    "height": {
+      "path": "height_r16.png",
+      "width": 512,
+      "height": 512,
+      "min_m": -0.05142238736152649,
+      "max_m": 1.0575599670410156,
+      "mpp": 0.5,
+      "encoding": "linear16"
+    },
+    "normal": {
+      "path": "normal.png",
+      "width": 512,
+      "height": 512,
+      "space": "tangent-ish, from height gradient"
+    }
+  },
+  "classes": [
+    {
+      "id": 0,
+      "key": "grass",
+      "name": "Grassland",
+      "color": [
+        110,
+        170,
+        80
+      ],
+      "coverage": 0.06377
+    },
+    {
+      "id": 1,
+      "key": "tree",
+      "name": "Tree canopy",
+      "color": [
+        40,
+        95,
+        50
+      ],
+      "coverage": 0.01088
+    },
+    {
+      "id": 2,
+      "key": "road",
+      "name": "Road / asphalt",
+      "color": [
+        70,
+        72,
+        78
+      ],
+      "coverage": 0.06903
+    },
+    {
+      "id": 3,
+      "key": "concrete",
+      "name": "Concrete / pavement",
+      "color": [
+        180,
+        180,
+        175
+      ],
+      "coverage": 0.03978
+    },
+    {
+      "id": 4,
+      "key": "building",
+      "name": "Building roof",
+      "color": [
+        170,
+        110,
+        95
+      ],
+      "coverage": 0.45613
+    },
+    {
+      "id": 5,
+      "key": "water",
+      "name": "Water",
+      "color": [
+        50,
+        110,
+        175
+      ],
+      "coverage": 0.04262
+    },
+    {
+      "id": 6,
+      "key": "soil",
+      "name": "Bare soil",
+      "color": [
+        140,
+        110,
+        80
+      ],
+      "coverage": 0.31624
+    },
+    {
+      "id": 7,
+      "key": "object",
+      "name": "Ground object",
+      "color": [
+        240,
+        70,
+        60
+      ],
+      "coverage": 0.00156
+    }
+  ],
+  "objects": {
+    "count": 27,
+    "note": "Small ground props -> scatter as 3D meshes via PCG, not painted.",
+    "items": [
+      {
+        "px": [
+          497.0,
+          5.0
+        ],
+        "lon": 121.47257158337092,
+        "lat": 31.23231750369588,
+        "local_e_m": 248.5,
+        "local_n_m": 253.5,
+        "area_px": 25.0
+      },
+      {
+        "px": [
+          329.0,
+          120.0
+        ],
+        "lon": 121.47169820829373,
+        "lat": 31.23178839377323,
+        "local_e_m": 164.5,
+        "local_n_m": 196.0,
+        "area_px": 9.0
+      },
+      {
+        "px": [
+          437.0,
+          139.0
+        ],
+        "lon": 121.47226640711561,
+        "lat": 31.231709443463664,
+        "local_e_m": 218.5,
+        "local_n_m": 186.5,
+        "area_px": 9.0
+      },
+      {
+        "px": [
+          444.0,
+          158.0
+        ],
+        "lon": 121.47230452434012,
+        "lat": 31.23162419303371,
+        "local_e_m": 222.0,
+        "local_n_m": 177.0,
+        "area_px": 25.0
+      },
+      {
+        "px": [
+          258.0,
+          158.0
+        ],
+        "lon": 121.47132833644623,
+        "lat": 31.231612589801735,
+        "local_e_m": 129.0,
+        "local_n_m": 177.0,
+        "area_px": 9.0
+      },
+      {
+        "px": [
+          420.0,
+          172.0
+        ],
+        "lon": 121.4721795807116,
+        "lat": 31.23155955848829,
+        "local_e_m": 210.0,
+        "local_n_m": 170.0,
+        "area_px": 9.0
+      },
+      {
+        "px": [
+          408.0,
+          178.0
+        ],
+        "lon": 121.47211703637885,
+        "lat": 31.231531751012522,
+        "local_e_m": 204.0,
+        "local_n_m": 167.0,
+        "area_px": 25.0
+      },
+      {
+        "px": [
+          280.0,
+          180.0
+        ],
+        "lon": 121.47144539704479,
+        "lat": 31.231514746150555,
+        "local_e_m": 140.0,
+        "local_n_m": 166.0,
+        "area_px": 25.0
+      },
+      {
+        "px": [
+          473.0,
+          199.0
+        ],
+        "lon": 121.47245970099253,
+        "lat": 31.2314410979762,
+        "local_e_m": 236.5,
+        "local_n_m": 156.5,
+        "area_px": 9.0
+      },
+      {
+        "px": [
+          316.0,
+          204.0
+        ],
+        "lon": 121.47163607895952,
+        "lat": 31.23140875618468,
+        "local_e_m": 158.0,
+        "local_n_m": 154.0,
+        "area_px": 25.0
+      },
+      {
+        "px": [
+          506.0,
+          204.0
+        ],
+        "lon": 121.47263325815041,
+        "lat": 31.231420606411707,
+        "local_e_m": 253.0,
+        "local_n_m": 154.0,
+        "area_px": 9.0
+      },
+      {
+        "px": [
+          273.0,
+          210.0
+        ],
+        "lon": 121.47141083734593,
+        "lat": 31.231379014183194,
+        "local_e_m": 136.5,
+        "local_n_m": 151.0,
+        "area_px": 25.0
+      },
+      {
+        "px": [
+          223.0,
+          216.0
+        ],
+        "lon": 121.47114885775174,
+        "lat": 31.23134883492855,
+        "local_e_m": 111.5,
+        "local_n_m": 148.0,
+        "area_px": 9.0
+      },
+      {
+        "px": [
+          311.0,
+          235.0
+        ],
+        "lon": 121.47161208822929,
+        "lat": 31.231268639200877,
+        "local_e_m": 155.5,
+        "local_n_m": 138.5,
+        "area_px": 9.0
+      },
+      {
+        "px": [
+          203.0,
+          306.0
+        ],
+        "lon": 121.47105042864285,
+        "lat": 31.23094170121091,
+        "local_e_m": 101.5,
+        "local_n_m": 103.0,
+        "area_px": 9.0
+      },
+      {
+        "px": [
+          245.0,
+          318.0
+        ],
+        "lon": 121.47127172799601,
+        "lat": 31.23089020429734,
+        "local_e_m": 122.5,
+        "local_n_m": 97.0,
+        "area_px": 25.0
+      },
+      {
+        "px": [
+          198.0,
+          338.0
+        ],
+        "lon": 121.47102651150313,
+        "lat": 31.230797074301,
+        "local_e_m": 99.0,
+        "local_n_m": 87.0,
+        "area_px": 25.0
+      },
+      {
+        "px": [
+          176.0,
+          343.0
+        ],
+        "lon": 121.47091141265783,
+        "lat": 31.23077315195378,
+        "local_e_m": 88.0,
+        "local_n_m": 84.5,
+        "area_px": 9.0
+      },
+      {
+        "px": [
+          119.0,
+          361.0
+        ],
+        "lon": 121.47061356886854,
+        "lat": 31.230688416672805,
+        "local_e_m": 59.5,
+        "local_n_m": 75.5,
+        "area_px": 9.0
+      },
+      {
+        "px": [
+          502.0,
+          361.0
+        ],
+        "lon": 121.47262365657902,
+        "lat": 31.230712311813498,
+        "local_e_m": 251.0,
+        "local_n_m": 75.5,
+        "area_px": 9.0
+      },
+      {
+        "px": [
+          102.0,
+          367.0
+        ],
+        "lon": 121.47052478426139,
+        "lat": 31.23066029629773,
+        "local_e_m": 51.0,
+        "local_n_m": 72.5,
+        "area_px": 9.0
+      },
+      {
+        "px": [
+          196.0,
+          377.0
+        ],
+        "lon": 121.47101884765918,
+        "lat": 31.230621065755525,
+        "local_e_m": 98.0,
+        "local_n_m": 67.5,
+        "area_px": 9.0
+      },
+      {
+        "px": [
+          78.0,
+          395.0
+        ],
+        "lon": 121.47040086043421,
+        "lat": 31.230532522365525,
+        "local_e_m": 39.0,
+        "local_n_m": 58.5,
+        "area_px": 9.0
+      },
+      {
+        "px": [
+          421.0,
+          472.0
+        ],
+        "lon": 121.47220660243359,
+        "lat": 31.23020666847421,
+        "local_e_m": 210.5,
+        "local_n_m": 20.0,
+        "area_px": 9.0
+      },
+      {
+        "px": [
+          190.0,
+          476.0
+        ],
+        "lon": 121.47099454881999,
+        "lat": 31.23017421720083,
+        "local_e_m": 95.0,
+        "local_n_m": 18.0,
+        "area_px": 25.0
+      },
+      {
+        "px": [
+          474.0,
+          502.0
+        ],
+        "lon": 121.47248693630179,
+        "lat": 31.23007467822114,
+        "local_e_m": 237.0,
+        "local_n_m": 5.0,
+        "area_px": 25.0
+      },
+      {
+        "px": [
+          129.0,
+          510.0
+        ],
+        "lon": 121.47067687622994,
+        "lat": 31.23001707503964,
+        "local_e_m": 64.5,
+        "local_n_m": 1.0,
+        "area_px": 15.0
+      }
+    ]
+  },
+  "mesh": {
+    "frame": "ENU_centered_m",
+    "x_axis": "east",
+    "y_axis": "up",
+    "z_axis": "-north",
+    "grid_n": 128,
+    "vertices": 16641,
+    "triangles": 32768,
+    "size_m": 256.0,
+    "origin_lon": 121.47,
+    "origin_lat": 31.23,
+    "center_lon": 121.47132495666169,
+    "center_lat": 31.231170500766304,
+    "z_min_m": -0.05131760984659195,
+    "z_max_m": 1.0386558771133423,
+    "uv": "u=col/N (E), v=row/N (N->S), flipY=false",
+    "obj": "ground.obj",
+    "glb": "ground.glb"
+  },
+  "material": {
+    "type": "layered_splat",
+    "blend": "macro_albedo * detail_tiling, weighted by splat",
+    "macro_albedo": "albedo.png",
+    "macro_normal": "normal.png",
+    "uv_world_scale_m": 2.0,
+    "splat_textures": [
+      "splat_0_rgba.png",
+      "splat_1_rgba.png"
+    ],
+    "splat_packing": "4 class weights per RGBA texture",
+    "layers": [
+      {
+        "class_id": 0,
+        "class_key": "grass",
+        "name": "Grassland",
+        "base_color": [
+          0.43137254901960786,
+          0.6666666666666666,
+          0.3137254901960784
+        ],
+        "coverage": 0.06377,
+        "weight_source": {
+          "texture": "splat_0_rgba.png",
+          "channel": "R"
+        },
+        "roughness": 0.92,
+        "height_scale_m": 0.1,
+        "tiling_m": 2.0,
+        "detail_material": "M_Detail_Grass",
+        "masked_by_osm": false,
+        "is_water": false,
+        "scatter": false
+      },
+      {
+        "class_id": 1,
+        "class_key": "tree",
+        "name": "Tree canopy",
+        "base_color": [
+          0.1568627450980392,
+          0.37254901960784315,
+          0.19607843137254902
+        ],
+        "coverage": 0.01088,
+        "weight_source": {
+          "texture": "splat_0_rgba.png",
+          "channel": "G"
+        },
+        "roughness": 0.88,
+        "height_scale_m": 0.35,
+        "tiling_m": 4.0,
+        "detail_material": "M_Detail_Canopy",
+        "masked_by_osm": false,
+        "is_water": false,
+        "scatter": false
+      },
+      {
+        "class_id": 2,
+        "class_key": "road",
+        "name": "Road / asphalt",
+        "base_color": [
+          0.27450980392156865,
+          0.2823529411764706,
+          0.3058823529411765
+        ],
+        "coverage": 0.06903,
+        "weight_source": {
+          "texture": "splat_0_rgba.png",
+          "channel": "B"
+        },
+        "roughness": 0.68,
+        "height_scale_m": 0.015,
+        "tiling_m": 3.0,
+        "detail_material": "M_Detail_Asphalt",
+        "masked_by_osm": false,
+        "is_water": false,
+        "scatter": false
+      },
+      {
+        "class_id": 3,
+        "class_key": "concrete",
+        "name": "Concrete / pavement",
+        "base_color": [
+          0.7058823529411765,
+          0.7058823529411765,
+          0.6862745098039216
+        ],
+        "coverage": 0.03978,
+        "weight_source": {
+          "texture": "splat_0_rgba.png",
+          "channel": "A"
+        },
+        "roughness": 0.8,
+        "height_scale_m": 0.02,
+        "tiling_m": 2.5,
+        "detail_material": "M_Detail_Concrete",
+        "masked_by_osm": false,
+        "is_water": false,
+        "scatter": false
+      },
+      {
+        "class_id": 4,
+        "class_key": "building",
+        "name": "Building roof",
+        "base_color": [
+          0.6666666666666666,
+          0.43137254901960786,
+          0.37254901960784315
+        ],
+        "coverage": 0.45613,
+        "weight_source": {
+          "texture": "splat_1_rgba.png",
+          "channel": "R"
+        },
+        "roughness": 0.6,
+        "height_scale_m": 0.0,
+        "tiling_m": 2.0,
+        "detail_material": "M_Detail_Roof",
+        "masked_by_osm": true,
+        "is_water": false,
+        "scatter": false
+      },
+      {
+        "class_id": 5,
+        "class_key": "water",
+        "name": "Water",
+        "base_color": [
+          0.19607843137254902,
+          0.43137254901960786,
+          0.6862745098039216
+        ],
+        "coverage": 0.04262,
+        "weight_source": {
+          "texture": "splat_1_rgba.png",
+          "channel": "G"
+        },
+        "roughness": 0.08,
+        "height_scale_m": 0.0,
+        "tiling_m": 6.0,
+        "detail_material": "M_Water",
+        "masked_by_osm": false,
+        "is_water": true,
+        "scatter": false
+      },
+      {
+        "class_id": 6,
+        "class_key": "soil",
+        "name": "Bare soil",
+        "base_color": [
+          0.5490196078431373,
+          0.43137254901960786,
+          0.3137254901960784
+        ],
+        "coverage": 0.31624,
+        "weight_source": {
+          "texture": "splat_1_rgba.png",
+          "channel": "B"
+        },
+        "roughness": 0.95,
+        "height_scale_m": 0.08,
+        "tiling_m": 2.0,
+        "detail_material": "M_Detail_Soil",
+        "masked_by_osm": false,
+        "is_water": false,
+        "scatter": false
+      },
+      {
+        "class_id": 7,
+        "class_key": "object",
+        "name": "Ground object",
+        "base_color": [
+          0.9411764705882353,
+          0.27450980392156865,
+          0.23529411764705882
+        ],
+        "coverage": 0.00156,
+        "weight_source": {
+          "texture": "splat_1_rgba.png",
+          "channel": "A"
+        },
+        "roughness": 0.5,
+        "height_scale_m": 0.4,
+        "tiling_m": 1.0,
+        "detail_material": null,
+        "masked_by_osm": false,
+        "is_water": false,
+        "scatter": true
+      }
+    ]
+  },
+  "stats": {
+    "duration_s": 1.77,
+    "n_objects": 27,
+    "albedo_px": 1024,
+    "splat_px": 512,
+    "segmentation_pixel_accuracy_vs_truth": 0.4184
+  },
+  "ue_import": {
+    "recommended": "georeferenced ground mesh + layered-splat material",
+    "placement": "SetOrigin(origin_lon, origin_lat) then GeoToWorld; rebuild grid from height field; paint layers from splat",
+    "alt": "Runtime Virtual Texture for very large extents",
+    "objects": "spawn objects[] as HISM via existing PCG pipeline"
+  },
+  "previews": {
+    "albedo": "preview_albedo.png",
+    "segmentation": "preview_segmentation.png",
+    "relief": "preview_relief.png",
+    "montage": "preview_montage.png"
+  }
+}
