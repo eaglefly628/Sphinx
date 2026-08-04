@@ -7,9 +7,58 @@
     "seed": 7
   },
   "super_resolution": {
-    "method": "classical_lanczos_unsharp",
+    "method": "edsr_x4_cnn_resampled_x2",
     "scale": 2,
-    "hallucinated": false
+    "hallucinated": true,
+    "model": "EDSR_x4",
+    "micro_detail": {
+      "applied": true,
+      "seed": 7,
+      "strength": 1.0,
+      "classes": [
+        {
+          "key_index": 0,
+          "feature_m": 0.35,
+          "amplitude": 0.1
+        },
+        {
+          "key_index": 1,
+          "feature_m": 0.6,
+          "amplitude": 0.12
+        },
+        {
+          "key_index": 2,
+          "feature_m": 0.06,
+          "amplitude": 0.05
+        },
+        {
+          "key_index": 3,
+          "feature_m": 0.1,
+          "amplitude": 0.05
+        },
+        {
+          "key_index": 4,
+          "feature_m": 0.25,
+          "amplitude": 0.07
+        },
+        {
+          "key_index": 5,
+          "feature_m": 1.5,
+          "amplitude": 0.04
+        },
+        {
+          "key_index": 6,
+          "feature_m": 0.2,
+          "amplitude": 0.09
+        },
+        {
+          "key_index": 7,
+          "feature_m": 0.15,
+          "amplitude": 0.06
+        }
+      ],
+      "note": "procedural micro-texture, synthesized (not sensed)"
+    }
   },
   "geo": {
     "crs": "WGS84",
@@ -689,7 +738,7 @@
     ]
   },
   "stats": {
-    "duration_s": 1.77,
+    "duration_s": 64.2,
     "n_objects": 27,
     "albedo_px": 1024,
     "splat_px": 512,

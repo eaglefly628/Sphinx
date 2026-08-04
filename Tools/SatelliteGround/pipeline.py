@@ -23,8 +23,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from satground import (datastructure, material, mesh, preview, relief, segment,
-                       superres, tile_source)
+from satground import (datastructure, detail, material, mesh, preview, relief,
+                       segment, superres, tile_source)
 
 
 def save_height16(height: np.ndarray, stats: dict, path: Path):
@@ -37,6 +37,10 @@ def main():
     ap.add_argument("--input", default="input", help="dir with optional tile.png")
     ap.add_argument("--output", default="output", help="output dir")
     ap.add_argument("--sr", type=int, default=2, help="super-resolution scale")
+    ap.add_argument("--sr-quality", choices=["high", "fast"], default="high",
+                    help="learned SR model: high=EDSR (slow), fast=FSRCNN")
+    ap.add_argument("--no-detail", action="store_true",
+                    help="skip class-guided micro-detail synthesis")
     ap.add_argument("--grid-n", type=int, default=128, help="mesh grid quads/edge")
     ap.add_argument("--tile-id", default="shanghai_demo_0_0")
     args = ap.parse_args()
@@ -55,8 +59,8 @@ def main():
           f"UTM{geo.utm_zone}{'N' if geo.northern else 'S'} epsg={geo.epsg}")
 
     print(f"[2/7] super-resolution x{args.sr} ...")
-    albedo, sr_info = superres.super_resolve(rgb, scale=args.sr)
-    Image.fromarray(albedo).save(out_dir / "albedo.png")
+    albedo, sr_info = superres.super_resolve(rgb, scale=args.sr,
+                                             quality=args.sr_quality)
     print(f"      albedo={albedo.shape[1]}x{albedo.shape[0]} "
           f"method={sr_info['method']} mpp={geo.mpp(albedo.shape[0]):.3f}")
 
@@ -67,6 +71,15 @@ def main():
         if c["coverage"] > 0.005:
             print(f"      {c['key']:9s} {c['coverage']*100:5.1f}%")
     print(f"      ground objects detected: {len(seg.objects)}")
+
+    if not args.no_detail:
+        albedo, det_info = detail.enrich_albedo(
+            albedo, seg.splat, geo.mpp(albedo.shape[0]))
+        sr_info["micro_detail"] = det_info
+        print("      micro-detail: class-guided procedural texture applied")
+    else:
+        sr_info["micro_detail"] = {"applied": False}
+    Image.fromarray(albedo).save(out_dir / "albedo.png")
 
     print("[4/7] relief (height + normal) ...")
     height, normal, hstats = relief.build_relief(seg.class_map, seg.splat, geo)

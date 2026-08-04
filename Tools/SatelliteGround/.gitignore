@@ -12,3 +12,5 @@ output/ground.obj
 
 # User-provided real tiles
 input/tile.*
+
+models/

@@ -66,7 +66,7 @@ pre-installed Chromium and saves a screenshot (used to validate WebGL output).
 | field | meaning |
 |-------|---------|
 | `geo` | WGS84 SW anchor, UTM zone/epsg, geo bbox, `geotransform_utm/geo` (pixel→CRS) |
-| `super_resolution` | method + whether detail is interpolated (honest, never hallucinated) |
+| `super_resolution` | method actually run (learned CNN vs classical), `hallucinated` flag, `micro_detail` record |
 | `raster.albedo` | super-res macro colour texture (+ m/px) |
 | `raster.splat` | RGBA-packed per-class weight maps (4 classes/texture) + channel order |
 | `raster.height` / `raster.normal` | 16-bit height (linear, min/max in m) + normal map |
@@ -93,7 +93,8 @@ pipeline.py            orchestrator (CLI)
 satground/
   geo.py               WGS84↔UTM, TileGeo anchor + geotransforms
   tile_source.py       load real tile / synthesise stand-in
-  superres.py          classical SR (pluggable AI backend)
+  superres.py          learned SR (EDSR/FSRCNN via dnn_superres) + classical fallback
+  detail.py            class-guided micro-texture synthesis (sub-pixel material grain)
   segment.py           KMeans + heuristic class mapping, water/object detection, splat
   relief.py            per-class height field + normal map
   mesh.py              georeferenced grid mesh → OBJ + GLB
@@ -106,7 +107,15 @@ viewer/                standalone three.js viewer (offline, vendored)
 ## Current limitations / roadmap
 
 - Input is a synthetic stand-in (egress blocks live tiles) — swap real tile in.
-- SR is classical; a Real-ESRGAN ONNX backend can slot into `superres._ai_backend`.
+- SR models are not committed (38 MB); fetch once into `models/`:
+  ```
+  curl -L -o models/FSRCNN_x4.pb https://raw.githubusercontent.com/Saafke/FSRCNN_Tensorflow/master/models/FSRCNN_x4.pb
+  curl -L -o models/EDSR_x4.pb   https://raw.githubusercontent.com/Saafke/EDSR_Tensorflow/master/models/EDSR_x4.pb
+  ```
+  Without them the pipeline falls back to classical Lanczos automatically.
+  `--sr-quality fast` uses FSRCNN (sub-second); default `high` uses EDSR
+  (CPU-tiled, ~1 min per 512 px tile). `--no-detail` disables the procedural
+  micro-texture pass. Real-ESRGAN ONNX remains a drop-in upgrade path.
 - Segmentation is unsupervised heuristics; replace `segment.segment()` with a
   learned remote-sensing model (OpenEarthMap / LoveDA) for production accuracy.
 - Single tile; tiling across `tile_manifest.json` + a UE importer come next.
